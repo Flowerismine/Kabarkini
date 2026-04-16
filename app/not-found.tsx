@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Home, Search, TrendingUp, ArrowRight } from 'lucide-react'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
+import { CategoryHoverLinks } from '@/components/news/category-hover-links'
 import { CATEGORIES, ARTICLES } from '@/lib/mock-data'
 
 export const metadata: Metadata = {
@@ -66,29 +67,7 @@ export default function NotFound() {
           <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-widest mb-4">
             Jelajahi Kategori
           </h2>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {CATEGORIES.map((cat) => (
-              <Link
-                key={cat.id}
-                href={`/kategori/${cat.slug}`}
-                className="text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors hover:text-white"
-                style={{
-                  borderColor: cat.color,
-                  color: cat.color,
-                }}
-                onMouseEnter={(e) => {
-                  ;(e.currentTarget as HTMLElement).style.backgroundColor = cat.color
-                  ;(e.currentTarget as HTMLElement).style.color = '#fff'
-                }}
-                onMouseLeave={(e) => {
-                  ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-                  ;(e.currentTarget as HTMLElement).style.color = cat.color
-                }}
-              >
-                {cat.name}
-              </Link>
-            ))}
-          </div>
+          <CategoryHoverLinks categories={CATEGORIES} />
         </div>
 
         {/* Popular articles */}
