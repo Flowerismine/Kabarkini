@@ -745,7 +745,6 @@ Para peneliti lingkungan mengingatkan bahwa krisis ini bukan sekadar bencana ala
     updatedAt: '2026-04-15T03:00:00Z',
     viewCount: 0,
   },
-]
 
   // ─── ARTIKEL 11 — INTERNASIONAL ────────────────────────────────
   {
