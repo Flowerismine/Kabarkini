@@ -260,19 +260,17 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </div>
 
             {/* Article body */}
-            <div
-              className="article-body prose prose-slate max-w-none"
-              itemProp="articleBody"
-              dangerouslySetInnerHTML={
-                article.articleHtml
-                  ? { __html: article.articleHtml }
-                  : undefined
-              }
-            >
-              {!article.articleHtml && (
+            {article.articleHtml ? (
+              <div
+                className="article-body prose prose-slate max-w-none"
+                itemProp="articleBody"
+                dangerouslySetInnerHTML={{ __html: article.articleHtml }}
+              />
+            ) : (
+              <div className="article-body prose prose-slate max-w-none" itemProp="articleBody">
                 <p>{article.articleText || article.excerpt}</p>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="flex justify-center my-6">
               <AdSlot position="in_content_2" />
