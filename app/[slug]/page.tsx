@@ -2,15 +2,8 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Clock,
-  Calendar,
-  Eye,
-  BookOpen,
-  ChevronRight,
-  ExternalLink,
-  CheckCircle2,
-  AlertCircle,
-  Info,
+  Clock, Calendar, Eye, BookOpen, ChevronRight,
+  ExternalLink, CheckCircle2, AlertCircle, Info,
 } from 'lucide-react'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
@@ -19,106 +12,111 @@ import { ArticleCard } from '@/components/news/article-card'
 import { AdSlot } from '@/components/ads/ad-slot'
 import { ShareButtons } from '@/components/news/share-buttons'
 import { NewsletterForm } from '@/components/news/newsletter-form'
-import { getArticleBySlug, getRelatedArticles, ARTICLES, getPublishedArticles } from '@/lib/mock-data'
+import {
+  getArticleBySlug,
+  getRelatedArticles,
+  getPublishedArticles,
+} from '@/lib/supabase/queries'
 import { formatDate, formatDateTime } from '@/lib/date-utils'
+
+// ── Dynamic rendering: artikel baru langsung muncul tanpa rebuild ──
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>
 }
 
-export async function generateStaticParams() {
-  return ARTICLES.map((a) => ({ slug: a.slug }))
-}
-
 export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
   const { slug } = await params
-  const article = getArticleBySlug(slug)
+  const article = await getArticleBySlug(slug)
   if (!article) return { title: 'Artikel Tidak Ditemukan' }
 
   return {
-    title: article.metaTitle || article.title,
+    title:       article.metaTitle || article.title,
     description: article.metaDescription || article.excerpt,
-    keywords: [article.focusKeyword, ...article.relatedKeywords],
-    authors: [{ name: article.authorLabel }],
+    keywords:    [article.focusKeyword, ...article.relatedKeywords],
+    authors:     [{ name: article.authorLabel }],
     openGraph: {
-      title: article.metaTitle || article.title,
-      description: article.metaDescription || article.excerpt,
-      type: 'article',
-      publishedTime: article.publishedAt,
-      modifiedTime: article.updatedAt,
-      authors: [article.authorLabel],
-      images: [
-        {
-          url: article.coverImageUrl,
-          width: 1200,
-          height: 630,
-          alt: article.coverImageAlt,
-        },
-      ],
+      title:         article.metaTitle || article.title,
+      description:   article.metaDescription || article.excerpt,
+      type:          'article',
+      publishedTime: article.publishedAt ?? undefined,
+      modifiedTime:  article.updatedAt,
+      authors:       [article.authorLabel],
+      images: article.coverImageUrl ? [
+        { url: article.coverImageUrl, width: 1200, height: 630, alt: article.coverImageAlt },
+      ] : [],
     },
     twitter: {
-      card: 'summary_large_image',
-      title: article.metaTitle || article.title,
+      card:        'summary_large_image',
+      title:       article.metaTitle || article.title,
       description: article.metaDescription || article.excerpt,
-      images: [article.coverImageUrl],
+      images:      article.coverImageUrl ? [article.coverImageUrl] : [],
     },
     alternates: {
-      canonical: article.canonicalUrl,
+      canonical: article.canonicalUrl || undefined,
     },
   }
 }
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
-  media: 'Media',
-  official: 'Sumber Resmi',
+  media:         'Media',
+  official:      'Sumber Resmi',
   press_release: 'Siaran Pers',
-  social: 'Media Sosial',
+  social:        'Media Sosial',
 }
 
 const VERIFICATION_CONFIG = {
-  verified: { label: 'Terverifikasi', color: 'text-green-700 bg-green-50 border-green-200', icon: CheckCircle2 },
-  partial: { label: 'Sebagian Terverifikasi', color: 'text-yellow-700 bg-yellow-50 border-yellow-200', icon: AlertCircle },
-  developing: { label: 'Masih Berkembang', color: 'text-blue-700 bg-blue-50 border-blue-200', icon: Info },
-  unverified: { label: 'Belum Diverifikasi', color: 'text-red-700 bg-red-50 border-red-200', icon: AlertCircle },
+  verified:   { label: 'Terverifikasi',          color: 'text-green-700 bg-green-50 border-green-200',   icon: CheckCircle2 },
+  partial:    { label: 'Sebagian Terverifikasi',  color: 'text-yellow-700 bg-yellow-50 border-yellow-200', icon: AlertCircle  },
+  developing: { label: 'Masih Berkembang',        color: 'text-blue-700 bg-blue-50 border-blue-200',      icon: Info         },
+  unverified: { label: 'Belum Diverifikasi',      color: 'text-red-700 bg-red-50 border-red-200',         icon: AlertCircle  },
 }
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params
-  const article = getArticleBySlug(slug)
+
+  // Fetch dari Supabase
+  const article = await getArticleBySlug(slug)
 
   if (!article || article.status !== 'published') {
     notFound()
   }
 
-  const related = getRelatedArticles(article, 4)
-  const popular = getPublishedArticles(6)
-    .filter((a) => a.id !== article.id)
-    .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
-    .slice(0, 5)
-  const verif = VERIFICATION_CONFIG[article.verificationStatus]
+  const [related, popular] = await Promise.all([
+    getRelatedArticles(article, 4),
+    getPublishedArticles(6).then(articles =>
+      articles
+        .filter(a => a.id !== article.id)
+        .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+        .slice(0, 5)
+    ),
+  ])
+
+  const verif     = VERIFICATION_CONFIG[article.verificationStatus] ?? VERIFICATION_CONFIG.unverified
   const VerifIcon = verif.icon
 
-  // JSON-LD NewsArticle Schema
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'NewsArticle',
-    headline: article.title,
-    alternativeHeadline: article.alternativeTitles[0],
+    '@type':    'NewsArticle',
+    headline:   article.title,
+    alternativeHeadline: article.alternativeTitles?.[0],
     description: article.excerpt,
-    image: [article.coverImageUrl],
+    image:       [article.coverImageUrl].filter(Boolean),
     datePublished: article.publishedAt,
-    dateModified: article.updatedAt,
+    dateModified:  article.updatedAt,
     author: [{ '@type': 'Organization', name: article.authorLabel }],
     publisher: {
       '@type': 'Organization',
-      name: 'KabarKini',
-      logo: { '@type': 'ImageObject', url: 'https://kabarkini.id/logo.png' },
+      name:    'KabarKini',
+      logo:    { '@type': 'ImageObject', url: 'https://kabarkini.id/logo.png' },
     },
-    url: article.canonicalUrl,
+    url:              article.canonicalUrl,
     mainEntityOfPage: { '@type': 'WebPage', '@id': article.canonicalUrl },
-    keywords: [article.focusKeyword, ...article.relatedKeywords].join(', '),
-    articleSection: article.category.name,
-    inLanguage: 'id',
+    keywords:         [article.focusKeyword, ...(article.relatedKeywords ?? [])].join(', '),
+    articleSection:   article.category.name,
+    inLanguage:       'id',
     isAccessibleForFree: true,
   }
 
@@ -189,13 +187,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <div className="flex flex-wrap items-center gap-4 mt-5 pb-5 border-b border-border text-sm text-muted-foreground">
               <span className="font-semibold text-foreground">{article.authorLabel}</span>
               {article.editorName && (
-                <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                  Ed: {article.editorName}
-                </span>
+                <span className="text-xs bg-muted px-2 py-0.5 rounded">Ed: {article.editorName}</span>
               )}
               <span className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
-                <time dateTime={article.publishedAt} itemProp="datePublished">
+                <time dateTime={article.publishedAt ?? undefined} itemProp="datePublished">
                   {formatDateTime(article.publishedAt || article.createdAt)}
                 </time>
               </span>
@@ -203,7 +199,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 <BookOpen className="w-3.5 h-3.5" />
                 {article.readingTime} menit baca
               </span>
-              {article.viewCount && (
+              {!!article.viewCount && (
                 <span className="flex items-center gap-1">
                   <Eye className="w-3.5 h-3.5" />
                   {article.viewCount.toLocaleString('id-ID')} pembaca
@@ -211,132 +207,95 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               )}
             </div>
 
-            {/* Share top */}
-            <ShareButtons url={article.canonicalUrl} title={article.title} compact />
+            <ShareButtons url={article.canonicalUrl || ''} title={article.title} compact />
 
             {/* Cover image */}
             <figure className="mt-6 mb-6">
               <img
-                src={`https://placehold.co/1200x630?text=${encodeURIComponent(article.category.name + '+Berita+Indonesia+Terkini+Detail')}`}
-                alt={article.coverImageAlt}
+                src={
+                  article.coverImageUrl ||
+                  `https://placehold.co/1200x630?text=${encodeURIComponent(article.category.name)}`
+                }
+                alt={article.coverImageAlt || article.title}
                 className="w-full rounded-xl object-cover"
                 loading="eager"
                 itemProp="image"
                 width={1200}
                 height={630}
               />
-              <figcaption className="text-xs text-muted-foreground mt-2 text-center">
-                Ilustrasi: {article.coverImageAlt}
-              </figcaption>
+              {article.coverImageAlt && (
+                <figcaption className="text-xs text-muted-foreground mt-2 text-center">
+                  Ilustrasi: {article.coverImageAlt}
+                </figcaption>
+              )}
             </figure>
 
-            {/* Verification status */}
+            {/* Verification */}
             <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium mb-6 ${verif.color}`}>
               <VerifIcon className="w-4 h-4 shrink-0" />
               <span>Status Verifikasi: {verif.label}</span>
-              <span className="text-xs opacity-70">
-                — {article.sourceCount} sumber dikonfirmasi
-              </span>
+              <span className="text-xs opacity-70">— {article.sourceCount} sumber dikonfirmasi</span>
             </div>
 
             {/* Bullet points */}
-            <div className="bg-[var(--navy)]/5 border border-[var(--navy)]/20 rounded-xl p-5 mb-6">
-              <h2 className="font-serif font-bold text-[var(--navy)] text-base mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 bg-[var(--navy)] rounded text-white text-xs flex items-center justify-center font-bold">
-                  i
-                </span>
-                Poin-Poin Utama
-              </h2>
-              <ul className="space-y-2">
-                {article.bulletPoints.map((point, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm text-foreground">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--red)] shrink-0 mt-2" />
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {article.bulletPoints?.length > 0 && (
+              <div className="bg-[var(--navy)]/5 border border-[var(--navy)]/20 rounded-xl p-5 mb-6">
+                <h2 className="font-serif font-bold text-[var(--navy)] text-base mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 bg-[var(--navy)] rounded text-white text-xs flex items-center justify-center font-bold">i</span>
+                  Poin-Poin Utama
+                </h2>
+                <ul className="space-y-2">
+                  {article.bulletPoints.map((point, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--red)] shrink-0 mt-2" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-            {/* Ad slot 1 */}
             <div className="flex justify-center my-6">
               <AdSlot position="in_content_1" />
             </div>
 
             {/* Article body */}
-            <div className="article-body" itemProp="articleBody">
-              <p>
-                {article.excerpt} Perkembangan ini menandai babak baru yang signifikan dalam dinamika
-                politik dan hukum nasional yang telah menjadi perhatian publik selama beberapa bulan
-                terakhir.
-              </p>
-
-              <h2>Kronologi dan Latar Belakang</h2>
-              <p>
-                Proses yang berujung pada pengesahan ini telah berlangsung selama lebih dari dua tahun,
-                dipicu oleh berbagai kasus besar yang menuntut kehadiran instrumen hukum yang lebih
-                kuat dan efektif. Para pemangku kepentingan dari berbagai lapisan masyarakat, mulai
-                dari akademisi hukum, lembaga antikorupsi, hingga kalangan bisnis, turut memberikan
-                masukan selama proses pembahasan berlangsung.
-              </p>
-
-              <blockquote>
-                &ldquo;Ini adalah terobosan besar yang sudah lama kami nantikan. Dengan regulasi ini,
-                penegakan hukum kita memiliki gigi yang jauh lebih kuat.&rdquo;
-              </blockquote>
-
-              <h2>Dampak dan Implikasi Nyata</h2>
-              <p>
-                Para pakar hukum yang diwawancarai oleh Tim Redaksi KabarKini menyatakan bahwa
-                implementasi regulasi ini akan membutuhkan kesiapan lembaga penegak hukum, infrastruktur
-                teknis yang memadai, serta koordinasi lintas instansi yang kuat. Beberapa tantangan
-                teknis diprediksi akan muncul dalam tahap awal penerapan.
-              </p>
-              <p>
-                Di sisi lain, kalangan aktivis antikorupsi menyambut langkah ini sebagai salah satu
-                pencapaian terbesar dalam sejarah pemberantasan korupsi di Indonesia. Sejumlah negara
-                di Asia Tenggara yang lebih dulu menerapkan regulasi serupa mencatat hasil yang
-                signifikan dalam pemulihan aset negara.
-              </p>
-
-              <h2>Respons Berbagai Pihak</h2>
-              <p>
-                Berbagai pihak memberikan tanggapan yang beragam. Kelompok yang mendukung menekankan
-                pentingnya langkah ini sebagai bagian dari reformasi hukum yang lebih luas. Sementara
-                sebagian pihak menggarisbawahi pentingnya mekanisme perlindungan hak-hak individu agar
-                regulasi ini tidak disalahgunakan.
-              </p>
-
-              <ul>
-                <li>Lembaga antikorupsi menyambut positif dan berharap implementasi segera dilakukan</li>
-                <li>Advokat dan asosiasi pengacara meminta kejelasan prosedur dan standar bukti</li>
-                <li>Pemerintah berkomitmen menyiapkan aturan pelaksana dalam 60 hari</li>
-                <li>DPR akan membentuk tim pengawas implementasi lintas komisi</li>
-              </ul>
+            <div
+              className="article-body prose prose-slate max-w-none"
+              itemProp="articleBody"
+              dangerouslySetInnerHTML={
+                article.articleHtml
+                  ? { __html: article.articleHtml }
+                  : undefined
+              }
+            >
+              {!article.articleHtml && (
+                <p>{article.articleText || article.excerpt}</p>
+              )}
             </div>
 
-            {/* Ad slot 2 */}
             <div className="flex justify-center my-6">
               <AdSlot position="in_content_2" />
             </div>
 
             {/* Why it matters */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 my-6">
-              <h2 className="font-serif font-bold text-amber-800 text-base mb-2">
-                Mengapa Ini Penting
-              </h2>
-              <p className="text-sm text-amber-900 leading-relaxed">{article.whyItMatters}</p>
-            </div>
+            {article.whyItMatters && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 my-6">
+                <h2 className="font-serif font-bold text-amber-800 text-base mb-2">Mengapa Ini Penting</h2>
+                <p className="text-sm text-amber-900 leading-relaxed">{article.whyItMatters}</p>
+              </div>
+            )}
 
             {/* Next to watch */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 my-6">
-              <h2 className="font-serif font-bold text-blue-800 text-base mb-2">
-                Yang Perlu Dipantau Selanjutnya
-              </h2>
-              <p className="text-sm text-blue-900 leading-relaxed">{article.nextToWatch}</p>
-            </div>
+            {article.nextToWatch && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 my-6">
+                <h2 className="font-serif font-bold text-blue-800 text-base mb-2">Yang Perlu Dipantau Selanjutnya</h2>
+                <p className="text-sm text-blue-900 leading-relaxed">{article.nextToWatch}</p>
+              </div>
+            )}
 
             {/* Tags */}
-            {article.tags.length > 0 && (
+            {article.tags?.length > 0 && (
               <div className="my-6">
                 <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">Tag:</p>
                 <div className="flex flex-wrap gap-2">
@@ -362,66 +321,58 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   editor manusia. Seluruh fakta telah diverifikasi dari sumber-sumber terpercaya yang
                   tercantum di bawah. Jika menemukan kesalahan faktual, silakan hubungi tim redaksi
                   kami melalui halaman{' '}
-                  <Link href="/kontak" className="underline hover:text-foreground">
-                    Kontak
-                  </Link>
-                  .
+                  <Link href="/kontak" className="underline hover:text-foreground">Kontak</Link>.
                 </p>
               </div>
             )}
 
             {/* Sources */}
-            <div className="border border-border rounded-xl p-5 my-6">
-              <h2 className="font-serif font-bold text-base text-foreground mb-4">
-                Sumber Referensi
-              </h2>
-              <ul className="space-y-3">
-                {article.sources.map((source) => (
-                  <li key={source.id} className="flex items-start gap-3 text-sm">
-                    <span
-                      className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded mt-0.5"
-                      style={{
-                        backgroundColor: source.type === 'official' ? '#065F4615' : '#1D4ED815',
-                        color: source.type === 'official' ? '#065F46' : '#1D4ED8',
-                      }}
-                    >
-                      {SOURCE_TYPE_LABEL[source.type]}
-                    </span>
-                    <div>
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        className="font-semibold text-[var(--navy)] hover:underline flex items-center gap-1"
+            {article.sources?.length > 0 && (
+              <div className="border border-border rounded-xl p-5 my-6">
+                <h2 className="font-serif font-bold text-base text-foreground mb-4">Sumber Referensi</h2>
+                <ul className="space-y-3">
+                  {article.sources.map((source) => (
+                    <li key={source.id} className="flex items-start gap-3 text-sm">
+                      <span
+                        className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded mt-0.5"
+                        style={{
+                          backgroundColor: source.type === 'official' ? '#065F4615' : '#1D4ED815',
+                          color:           source.type === 'official' ? '#065F46'   : '#1D4ED8',
+                        }}
                       >
-                        {source.name}
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                      {source.publishedAt && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Diterbitkan: {formatDate(source.publishedAt)}
-                        </p>
-                      )}
-                    </div>
-                    <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                      Kepercayaan: {source.trustScore}/100
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                        {SOURCE_TYPE_LABEL[source.type] ?? source.type}
+                      </span>
+                      <div>
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer nofollow"
+                          className="font-semibold text-[var(--navy)] hover:underline flex items-center gap-1"
+                        >
+                          {source.name}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        {source.publishedAt && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Diterbitkan: {formatDate(source.publishedAt)}
+                          </p>
+                        )}
+                      </div>
+                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                        Kepercayaan: {source.trustScore}/100
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-            {/* Share bottom */}
             <div className="mt-2">
               <p className="text-sm font-semibold text-foreground mb-3">Artikel ini bermanfaat? Bagikan:</p>
-              <ShareButtons url={article.canonicalUrl} title={article.title} />
+              <ShareButtons url={article.canonicalUrl || ''} title={article.title} />
             </div>
 
-            {/* Newsletter CTA */}
-            <section
-              aria-label="Newsletter"
-              className="bg-[var(--navy)] rounded-2xl p-6 md:p-8 text-white mt-8"
-            >
+            <section aria-label="Newsletter" className="bg-[var(--navy)] rounded-2xl p-6 md:p-8 text-white mt-8">
               <h2 className="font-serif text-xl font-bold text-white text-balance">
                 Jangan Ketinggalan Berita Penting
               </h2>
@@ -438,7 +389,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             <div className="sticky top-24 space-y-5">
               <AdSlot position="sidebar" />
 
-              {/* Most read */}
               {popular.length > 0 && (
                 <div className="bg-white rounded-xl border border-border p-5">
                   <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
@@ -460,9 +410,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                           >
                             {a.title}
                           </a>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {a.viewCount?.toLocaleString('id-ID')} pembaca
-                          </p>
+                          {!!a.viewCount && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {a.viewCount.toLocaleString('id-ID')} pembaca
+                            </p>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -470,7 +422,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 </div>
               )}
 
-              {/* Related */}
               {related.length > 0 && (
                 <div className="bg-white rounded-xl border border-border p-5">
                   <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
@@ -478,11 +429,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                   </h3>
                   <div className="space-y-4">
                     {related.map((r) => (
-                      <ArticleCard
-                        key={r.id}
-                        article={r}
-                        variant="minimal"
-                      />
+                      <ArticleCard key={r.id} article={r} variant="minimal" />
                     ))}
                   </div>
                 </div>
@@ -491,7 +438,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           </aside>
         </div>
 
-        {/* Related articles bottom */}
         {related.length > 0 && (
           <section aria-labelledby="related-heading" className="mt-12 border-t border-border pt-8">
             <h2 id="related-heading" className="font-serif text-2xl font-bold text-foreground mb-6">
