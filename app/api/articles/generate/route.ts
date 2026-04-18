@@ -1,10 +1,4 @@
 // app/api/articles/generate/route.ts
-// ============================================================
-// KabarKini — Full Pipeline Runner
-// Dipanggil oleh /api/workflow/run secara fire-and-forget
-// Body: { runId, runType, topics? }
-// ============================================================
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import {
@@ -17,7 +11,6 @@ import {
   type PipelineLog,
 } from '@/lib/workflow/pipeline'
 
-// Helper: tulis log ke workflow_logs
 async function writeLog(
   supabase: ReturnType<typeof createAdminClient>,
   runId: string,
@@ -32,7 +25,6 @@ async function writeLog(
   })
 }
 
-// Helper: simpan 1 artikel ke Supabase, return article id
 async function saveArticle(
   supabase: ReturnType<typeof createAdminClient>,
   article: GeneratedArticle,
@@ -43,13 +35,15 @@ async function saveArticle(
     .insert({
       title:                     article.title,
       alternative_titles:        article.alternativeTitles,
-      slug:                      article.slug + '-' + Date.now(), // dedup
+      slug:                      article.slug + '-' + Date.now(),
       excerpt:                   article.excerpt,
       meta_title:                article.metaTitle,
       meta_description:          article.metaDescription,
       focus_keyword:             article.focusKeyword,
       related_keywords:          article.relatedKeywords,
       category_id:               categoryId,
+      cover_image_url:           article.coverImageUrl,       // ← simpan foto
+      cover_image_alt:           article.coverImageAlt || article.title,
       cover_image_prompt:        article.coverImagePrompt,
       article_text:              article.articleText,
       article_html:              article.articleHtml,
@@ -67,7 +61,7 @@ async function saveArticle(
       author_type:               'ai',
       author_label:              'AI News Desk',
       is_breaking:               false,
-      word_count:                article.articleText.split(' ').length,
+      word_count:                article.articleText.split(/\s+/).length,
       published_at:              article.status === 'published' ? new Date().toISOString() : null,
     })
     .select('id')
@@ -75,10 +69,9 @@ async function saveArticle(
 
   if (error || !data) return null
 
-  // Save sources
   if (article.sources.length > 0) {
     await supabase.from('article_sources').insert(
-      article.sources.map((src) => ({
+      article.sources.map(src => ({
         article_id:  data.id,
         name:        src.name,
         url:         src.url,
@@ -87,40 +80,26 @@ async function saveArticle(
       }))
     )
   }
-
   return data.id
 }
 
-// Helper: resolve category slug → id (fallback ke kategori pertama)
 async function resolveCategoryId(
   supabase: ReturnType<typeof createAdminClient>,
   categorySlug: string
 ): Promise<string> {
   const { data } = await supabase
-    .from('categories')
-    .select('id')
-    .eq('slug', categorySlug)
-    .single()
-
+    .from('categories').select('id').eq('slug', categorySlug).single()
   if (data?.id) return data.id
-
-  // Fallback ke kategori pertama di DB
   const { data: first } = await supabase
-    .from('categories')
-    .select('id')
-    .limit(1)
-    .single()
-
+    .from('categories').select('id').limit(1).single()
   return first?.id ?? ''
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { runId, runType = 'manual', topics = '' } = body
-
   const supabase = createAdminClient()
 
-  // ── Ambil threshold dari site_settings ────────────────────
   let autoPublishThreshold = 85
   let reviewThreshold      = 70
   let maxArticles          = 8
@@ -128,8 +107,7 @@ export async function POST(req: NextRequest) {
   const { data: settings } = await supabase
     .from('site_settings')
     .select('auto_publish_threshold, review_threshold, articles_per_page')
-    .eq('id', 1)
-    .single()
+    .eq('id', 1).single()
 
   if (settings) {
     autoPublishThreshold = settings.auto_publish_threshold ?? 85
@@ -139,12 +117,9 @@ export async function POST(req: NextRequest) {
 
   try {
     if (runType === 'manual' && topics) {
-      // ── Mode Manual: 1 artikel per topik yang diinput ─────
-      const topicList = topics.split(',').map((t: string) => t.trim()).filter(Boolean)
-
-      const rawSources = preFilterSources(ingestSources())
+      const topicList  = topics.split(',').map((t: string) => t.trim()).filter(Boolean)
+      const rawSources = preFilterSources(await ingestSources())
       const clusters   = clusterTopics(rawSources)
-
       let published = 0, inReview = 0, rejected = 0
 
       for (const topic of topicList.slice(0, maxArticles)) {
@@ -153,10 +128,9 @@ export async function POST(req: NextRequest) {
 
         await log('Article Generation', `Menulis artikel manual: "${topic}"`)
 
-        let cluster = clusters.find(
-          (c) =>
-            c.topicTitle.toLowerCase().includes(topic.toLowerCase()) ||
-            c.keywords.some((k) => topic.toLowerCase().includes(k))
+        let cluster = clusters.find(c =>
+          c.topicTitle.toLowerCase().includes(topic.toLowerCase()) ||
+          c.keywords.some(k => topic.toLowerCase().includes(k))
         )
 
         if (!cluster) {
@@ -175,17 +149,16 @@ export async function POST(req: NextRequest) {
         const catId   = await resolveCategoryId(supabase, article.category)
         await saveArticle(supabase, article, catId)
 
-        if (article.publishReadinessScore >= autoPublishThreshold)      published++
-        else if (article.publishReadinessScore >= reviewThreshold)       inReview++
-        else                                                              rejected++
+        if (article.publishReadinessScore >= autoPublishThreshold)    published++
+        else if (article.publishReadinessScore >= reviewThreshold)    inReview++
+        else                                                           rejected++
 
         await log('Publish', `Artikel "${article.title.slice(0, 60)}" disimpan (${article.status})`, 'success')
       }
 
-      // Update workflow_runs
       if (runId) {
         await supabase.from('workflow_runs').update({
-          status:             topicList.length > 0 ? 'completed' : 'partial',
+          status:             'completed',
           completed_at:       new Date().toISOString(),
           articles_generated: topicList.length,
           articles_published: published,
@@ -195,7 +168,6 @@ export async function POST(req: NextRequest) {
       }
 
     } else {
-      // ── Mode Auto: jalankan full pipeline ─────────────────
       const result = await runDailyPipeline({
         runType:              runType as 'daily_main' | 'breaking' | 'manual',
         maxArticles,
@@ -203,20 +175,15 @@ export async function POST(req: NextRequest) {
         reviewThreshold,
       })
 
-      // Tulis semua log pipeline ke DB
       if (runId) {
-        for (const log of result.logs) {
-          await writeLog(supabase, runId, log)
-        }
+        for (const log of result.logs) await writeLog(supabase, runId, log)
       }
 
-      // Simpan semua artikel
       for (const article of result.articles) {
         const catId = await resolveCategoryId(supabase, article.category)
         await saveArticle(supabase, article, catId)
       }
 
-      // Update workflow_runs
       if (runId) {
         await supabase.from('workflow_runs').update({
           status:             result.errors.length === 0 ? 'completed' : 'partial',
@@ -236,23 +203,15 @@ export async function POST(req: NextRequest) {
 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-
-    // Mark run as failed
     if (runId) {
       await supabase.from('workflow_runs').update({
-        status:       'failed',
-        completed_at: new Date().toISOString(),
-        errors:       [message],
+        status: 'failed', completed_at: new Date().toISOString(), errors: [message],
       }).eq('id', runId)
-
       await supabase.from('workflow_logs').insert({
-        workflow_run_id: runId,
-        step:    'Workflow',
-        message: `Pipeline gagal: ${message}`,
-        level:   'error',
+        workflow_run_id: runId, step: 'Workflow',
+        message: `Pipeline gagal: ${message}`, level: 'error',
       })
     }
-
     return NextResponse.json({ success: false, error: message }, { status: 500 })
   }
 }
