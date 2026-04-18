@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { transformCategoryRow } from '@/lib/supabase/transform'
 
-// PATCH /api/categories/[id]
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const body = await req.json().catch(() => ({}))
   const supabase = createAdminClient()
 
@@ -20,7 +20,7 @@ export async function PATCH(
   const { data, error } = await supabase
     .from('categories')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single()
 
@@ -28,18 +28,17 @@ export async function PATCH(
   return NextResponse.json({ category: transformCategoryRow(data) })
 }
 
-// DELETE /api/categories/[id]
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const supabase = createAdminClient()
 
-  // Guard: reject if category still has articles
   const { count } = await supabase
     .from('articles')
     .select('id', { count: 'exact', head: true })
-    .eq('category_id', params.id)
+    .eq('category_id', id)
 
   if ((count ?? 0) > 0) {
     return NextResponse.json(
@@ -51,7 +50,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('categories')
     .delete()
-    .eq('id', params.id)
+    .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
