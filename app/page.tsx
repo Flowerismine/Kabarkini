@@ -3,49 +3,68 @@ import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { BreakingTicker } from '@/components/layout/breaking-ticker'
 import { HeroSection } from '@/components/news/hero-section'
-import { TrendingSection } from '@/components/news/trending-section'
-import { CategorySection } from '@/components/news/category-section'
 import { ArticleCard } from '@/components/news/article-card'
 import { AdSlot } from '@/components/ads/ad-slot'
 import {
-  ARTICLES,
-  CATEGORIES,
-  TRENDING_TOPICS,
+  getPublishedArticles,
   getFeaturedArticles,
-  getTrendingArticles,
   getArticlesByCategory,
-} from '@/lib/mock-data'
+  getCategories,
+} from '@/lib/supabase/queries'
 import Link from 'next/link'
 import { NewsletterForm } from '@/components/news/newsletter-form'
 import { ArrowRight, Star } from 'lucide-react'
 
+// Selalu fetch fresh — tidak cache
+export const dynamic   = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata: Metadata = {
-  title: 'KabarKini — Fakta Cepat. Analisis Tepat.',
-  description:
-    'Portal berita digital Indonesia terpercaya. Berita terkini, analisis mendalam, dan isu-isu panas nasional setiap hari.',
+  title:       'KabarKini — Fakta Cepat. Analisis Tepat.',
+  description: 'Portal berita digital Indonesia terpercaya. Berita terkini, analisis mendalam, dan isu-isu panas nasional setiap hari.',
   openGraph: {
-    title: 'KabarKini — Fakta Cepat. Analisis Tepat.',
-    description:
-      'Portal berita digital Indonesia terpercaya. Berita terkini, analisis mendalam, dan isu-isu panas nasional setiap hari.',
-    type: 'website',
+    title:       'KabarKini — Fakta Cepat. Analisis Tepat.',
+    description: 'Portal berita digital Indonesia terpercaya.',
+    type:        'website',
   },
 }
 
-export default function HomePage() {
-  const featuredArticles = getFeaturedArticles()
-  const trendingArticles = getTrendingArticles()
-  const publishedArticles = ARTICLES.filter((a) => a.status === 'published')
-  const latestArticles = [...publishedArticles].sort(
-    (a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime()
-  )
+// Hardcode kategori nav — tidak perlu fetch
+const NAV_CATEGORIES = [
+  { name: 'Politik',       slug: 'politik'       },
+  { name: 'Hukum',         slug: 'hukum'         },
+  { name: 'Ekonomi',       slug: 'ekonomi'       },
+  { name: 'Teknologi',     slug: 'teknologi'     },
+  { name: 'Sosial',        slug: 'sosial'        },
+  { name: 'Olahraga',      slug: 'olahraga'      },
+  { name: 'Internasional', slug: 'internasional' },
+  { name: 'Viral',         slug: 'viral'         },
+]
 
-  const politikArticles = getArticlesByCategory('politik')
-  const hukumArticles = getArticlesByCategory('hukum')
-  const ekonomiArticles = getArticlesByCategory('ekonomi')
-  const teknologiArticles = getArticlesByCategory('teknologi')
+const POPULAR_TAGS = ['DPR','KPK','Korupsi','Pemilu','BI Rate','AI','Hukum','APBN','Gempa','Timnas']
 
-  // Editor picks
-  const editorPicks = publishedArticles.filter((a) => a.isFeatured).slice(0, 3)
+export default async function HomePage() {
+  // Fetch semua data dari Supabase secara parallel
+  const [
+    latestArticles,
+    featuredArticles,
+    politikArticles,
+    hukumArticles,
+    ekonomiArticles,
+    teknologiArticles,
+  ] = await Promise.all([
+    getPublishedArticles(12),
+    getFeaturedArticles(),
+    getArticlesByCategory('politik'),
+    getArticlesByCategory('hukum'),
+    getArticlesByCategory('ekonomi'),
+    getArticlesByCategory('teknologi'),
+  ])
+
+  const editorPicks = featuredArticles.slice(0, 3)
+  const popularArticles = [...latestArticles]
+    .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+    .slice(0, 5)
 
   return (
     <>
@@ -58,23 +77,25 @@ export default function HomePage() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-8" id="main-content">
-        {/* Hero */}
-        <HeroSection articles={latestArticles.slice(0, 4)} />
+
+        {/* Hero — 4 artikel terbaru */}
+        {latestArticles.length > 0 ? (
+          <HeroSection articles={latestArticles.slice(0, 4)} />
+        ) : (
+          <div className="bg-slate-50 rounded-2xl p-12 text-center mb-8">
+            <p className="text-slate-400 text-lg font-serif">Belum ada artikel yang diterbitkan.</p>
+            <p className="text-slate-400 text-sm mt-2">Jalankan workflow untuk mulai generate berita.</p>
+          </div>
+        )}
 
         {/* Category nav strip */}
-        <nav
-          aria-label="Kategori berita"
-          className="flex gap-2 overflow-x-auto pb-2 mb-8 scrollbar-hide"
-        >
-          <Link
-            href="/"
-            className="shrink-0 bg-[var(--navy)] text-white text-xs font-bold px-4 py-2 rounded-full"
-          >
+        <nav aria-label="Kategori berita" className="flex gap-2 overflow-x-auto pb-2 mb-8 scrollbar-hide">
+          <Link href="/" className="shrink-0 bg-[var(--navy)] text-white text-xs font-bold px-4 py-2 rounded-full">
             Semua
           </Link>
-          {CATEGORIES.map((cat) => (
+          {NAV_CATEGORIES.map(cat => (
             <Link
-              key={cat.id}
+              key={cat.slug}
               href={`/kategori/${cat.slug}`}
               className="shrink-0 text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-[var(--navy)] hover:text-[var(--navy)] transition-colors whitespace-nowrap"
             >
@@ -84,156 +105,179 @@ export default function HomePage() {
         </nav>
 
         {/* Latest news grid */}
-        <section aria-labelledby="terbaru-heading" className="mb-10">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-6 bg-[var(--navy)] rounded-full" />
-              <h2 id="terbaru-heading" className="font-serif text-xl font-bold text-foreground">
-                Berita Terbaru
-              </h2>
+        {latestArticles.length > 0 && (
+          <section aria-labelledby="terbaru-heading" className="mb-10">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-6 bg-[var(--navy)] rounded-full" />
+                <h2 id="terbaru-heading" className="font-serif text-xl font-bold text-foreground">Berita Terbaru</h2>
+              </div>
+              <Link href="/arsip" className="text-sm text-[var(--navy)] font-semibold hover:text-[var(--red)] transition-colors flex items-center gap-1">
+                Lihat arsip <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
-            <Link
-              href="/arsip"
-              className="text-sm text-[var(--navy)] font-semibold hover:text-[var(--red)] transition-colors flex items-center gap-1"
-            >
-              Lihat arsip <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {latestArticles.slice(0, 6).map(article => (
+                <ArticleCard key={article.id} article={article} variant="default" />
+              ))}
+            </div>
+          </section>
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {latestArticles.slice(0, 6).map((article) => (
-              <ArticleCard key={article.id} article={article} variant="default" />
-            ))}
-          </div>
-        </section>
-
-        {/* In-content Ad 1 */}
         <div className="flex justify-center my-8">
           <AdSlot position="in_content_1" />
         </div>
 
-        {/* Trending */}
-        <TrendingSection topics={TRENDING_TOPICS} articles={trendingArticles} />
-
         {/* Two column: categories + sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-          {/* Main content column */}
           <div className="lg:col-span-2 space-y-10">
+
             {/* Politik */}
             {politikArticles.length > 0 && (
-              <CategorySection
-                category={CATEGORIES[0]}
-                articles={politikArticles}
-                layout="grid"
-              />
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-5 bg-red-600 rounded-full" />
+                    <h2 className="font-serif text-lg font-bold text-foreground">
+                      Politik <span className="text-sm font-normal text-muted-foreground ml-1">{politikArticles.length} artikel</span>
+                    </h2>
+                  </div>
+                  <Link href="/kategori/politik" className="text-xs text-[var(--navy)] font-semibold hover:underline flex items-center gap-1">
+                    Lihat semua <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {politikArticles.slice(0, 4).map(a => <ArticleCard key={a.id} article={a} variant="compact" />)}
+                </div>
+              </section>
             )}
 
-            {/* In-content Ad 2 */}
             <div className="flex justify-center">
               <AdSlot position="in_content_2" />
             </div>
 
             {/* Hukum */}
             {hukumArticles.length > 0 && (
-              <CategorySection
-                category={CATEGORIES[1]}
-                articles={hukumArticles}
-                layout="grid"
-              />
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-5 bg-blue-600 rounded-full" />
+                    <h2 className="font-serif text-lg font-bold text-foreground">
+                      Hukum <span className="text-sm font-normal text-muted-foreground ml-1">{hukumArticles.length} artikel</span>
+                    </h2>
+                  </div>
+                  <Link href="/kategori/hukum" className="text-xs text-[var(--navy)] font-semibold hover:underline flex items-center gap-1">
+                    Lihat semua <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {hukumArticles.slice(0, 4).map(a => <ArticleCard key={a.id} article={a} variant="compact" />)}
+                </div>
+              </section>
             )}
 
             {/* Ekonomi */}
             {ekonomiArticles.length > 0 && (
-              <CategorySection
-                category={CATEGORIES[2]}
-                articles={ekonomiArticles}
-                layout="grid"
-              />
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-5 bg-green-600 rounded-full" />
+                    <h2 className="font-serif text-lg font-bold text-foreground">
+                      Ekonomi <span className="text-sm font-normal text-muted-foreground ml-1">{ekonomiArticles.length} artikel</span>
+                    </h2>
+                  </div>
+                  <Link href="/kategori/ekonomi" className="text-xs text-[var(--navy)] font-semibold hover:underline flex items-center gap-1">
+                    Lihat semua <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {ekonomiArticles.slice(0, 4).map(a => <ArticleCard key={a.id} article={a} variant="compact" />)}
+                </div>
+              </section>
             )}
 
             {/* Teknologi */}
             {teknologiArticles.length > 0 && (
-              <CategorySection
-                category={CATEGORIES[3]}
-                articles={teknologiArticles}
-                layout="grid"
-              />
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-5 bg-purple-600 rounded-full" />
+                    <h2 className="font-serif text-lg font-bold text-foreground">
+                      Teknologi <span className="text-sm font-normal text-muted-foreground ml-1">{teknologiArticles.length} artikel</span>
+                    </h2>
+                  </div>
+                  <Link href="/kategori/teknologi" className="text-xs text-[var(--navy)] font-semibold hover:underline flex items-center gap-1">
+                    Lihat semua <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {teknologiArticles.slice(0, 4).map(a => <ArticleCard key={a.id} article={a} variant="compact" />)}
+                </div>
+              </section>
             )}
           </div>
 
           {/* Sidebar */}
           <aside className="lg:col-span-1 space-y-6">
-            {/* Sidebar Ad */}
             <div className="sticky top-24">
               <AdSlot position="sidebar" className="mb-6" />
 
               {/* Editor picks */}
-              <div className="bg-white rounded-xl border border-border p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                  <h3 className="font-serif font-bold text-base text-foreground">
-                    Pilihan Editor
-                  </h3>
+              {editorPicks.length > 0 && (
+                <div className="bg-white rounded-xl border border-border p-5 mb-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <h3 className="font-serif font-bold text-base text-foreground">Pilihan Editor</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {editorPicks.map(article => (
+                      <ArticleCard key={article.id} article={article} variant="minimal" showImage={false} />
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-4">
-                  {editorPicks.map((article) => (
-                    <ArticleCard
-                      key={article.id}
-                      article={article}
-                      variant="minimal"
-                      showImage={false}
-                    />
-                  ))}
-                </div>
-              </div>
+              )}
 
-              {/* Popular articles */}
-              <div className="bg-white rounded-xl border border-border p-5 mt-5">
-                <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
-                  Paling Banyak Dibaca
-                </h3>
-                <ol className="space-y-3">
-                  {[...publishedArticles]
-                    .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
-                    .slice(0, 5)
-                    .map((article, idx) => (
+              {/* Popular */}
+              {popularArticles.length > 0 && (
+                <div className="bg-white rounded-xl border border-border p-5 mt-5">
+                  <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
+                    Paling Banyak Dibaca
+                  </h3>
+                  <ol className="space-y-3">
+                    {popularArticles.map((article, idx) => (
                       <li key={article.id} className="flex items-start gap-3 group">
                         <span className="font-serif text-2xl font-bold text-border leading-none shrink-0 w-6 text-center">
                           {idx + 1}
                         </span>
                         <div>
-                          <Link
-                            href={`/${article.slug}`}
-                            className="text-sm font-semibold text-foreground group-hover:text-[var(--navy)] transition-colors line-clamp-2 leading-snug"
-                          >
+                          <Link href={`/${article.slug}`}
+                            className="text-sm font-semibold text-foreground group-hover:text-[var(--navy)] transition-colors line-clamp-2 leading-snug">
                             {article.title}
                           </Link>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {article.viewCount?.toLocaleString('id-ID')} pembaca
-                          </p>
+                          {!!article.viewCount && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {article.viewCount.toLocaleString('id-ID')} pembaca
+                            </p>
+                          )}
                         </div>
                       </li>
                     ))}
-                </ol>
-              </div>
+                  </ol>
+                </div>
+              )}
 
-              {/* Tags cloud */}
+              {/* Tags */}
               <div className="bg-white rounded-xl border border-border p-5 mt-5">
                 <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
                   Topik Populer
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {['DPR', 'KPK', 'Korupsi', 'Pemilu', 'BI Rate', 'AI', 'Hukum', 'APBN', 'Gempa', 'Timnas'].map(
-                    (tag) => (
-                      <Link
-                        key={tag}
-                        href={`/pencarian?q=${encodeURIComponent(tag)}`}
-                        className="text-xs bg-muted hover:bg-[var(--navy)] hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium"
-                      >
-                        {tag}
-                      </Link>
-                    )
-                  )}
+                  {POPULAR_TAGS.map(tag => (
+                    <Link key={tag} href={`/pencarian?q=${encodeURIComponent(tag)}`}
+                      className="text-xs bg-muted hover:bg-[var(--navy)] hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium">
+                      {tag}
+                    </Link>
+                  ))}
                 </div>
               </div>
             </div>
@@ -241,10 +285,7 @@ export default function HomePage() {
         </div>
 
         {/* Newsletter */}
-        <section
-          aria-label="Langganan newsletter"
-          className="bg-[var(--navy)] rounded-2xl p-8 md:p-12 text-white mb-10"
-        >
+        <section aria-label="Langganan newsletter" className="bg-[var(--navy)] rounded-2xl p-8 md:p-12 text-white mb-10">
           <div className="max-w-xl mx-auto text-center">
             <h2 className="font-serif text-2xl md:text-3xl font-bold text-white text-balance">
               Jangan Ketinggalan Berita Penting
@@ -254,9 +295,7 @@ export default function HomePage() {
               inbox Anda setiap pagi sebelum memulai hari.
             </p>
             <NewsletterForm />
-            <p className="text-slate-500 text-xs mt-3">
-              Tanpa spam. Bisa berhenti berlangganan kapan saja.
-            </p>
+            <p className="text-slate-500 text-xs mt-3">Tanpa spam. Bisa berhenti berlangganan kapan saja.</p>
           </div>
         </section>
       </main>
