@@ -3,17 +3,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { transformArticleRow } from '@/lib/supabase/transform'
 
-// GET /api/articles/[id] — full article with sources
+// GET /api/articles/[id]
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const supabase = createAdminClient()
 
   const { data: row, error } = await supabase
     .from('articles_with_category')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (error || !row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -21,21 +22,20 @@ export async function GET(
   const { data: sources } = await supabase
     .from('article_sources')
     .select('*')
-    .eq('article_id', params.id)
+    .eq('article_id', id)
 
   return NextResponse.json({ article: transformArticleRow(row, sources ?? []) })
 }
 
-// PATCH /api/articles/[id] — update status / schedule / etc.
-// Body: { status?, scheduledAt?, editorNote? }
+// PATCH /api/articles/[id]
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const body = await req.json().catch(() => ({}))
   const supabase = createAdminClient()
 
-  // Build update payload
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
   if (body.status) {
@@ -47,14 +47,11 @@ export async function PATCH(
       updates.scheduled_at = body.scheduledAt
     }
   }
-  if (body.editorNote !== undefined) {
-    // Store editor note — extend if you add a column; for now skip silently
-  }
 
   const { data, error } = await supabase
     .from('articles')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single()
 
@@ -65,14 +62,15 @@ export async function PATCH(
 // DELETE /api/articles/[id]
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params
   const supabase = createAdminClient()
 
   const { error } = await supabase
     .from('articles')
     .delete()
-    .eq('id', params.id)
+    .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
