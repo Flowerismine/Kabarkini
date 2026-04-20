@@ -7,6 +7,43 @@ interface HeroSectionProps {
   articles: Article[]
 }
 
+// Fallback images per kategori dari Unsplash (tidak pakai placehold.co)
+const CATEGORY_FALLBACK: Record<string, string> = {
+  politik:       'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=1200&h=680&fit=crop&auto=format',
+  hukum:         'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=1200&h=680&fit=crop&auto=format',
+  ekonomi:       'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&h=680&fit=crop&auto=format',
+  teknologi:     'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&h=680&fit=crop&auto=format',
+  sosial:        'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1200&h=680&fit=crop&auto=format',
+  olahraga:      'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&h=680&fit=crop&auto=format',
+  internasional: 'https://images.unsplash.com/photo-1526470608268-f674ce90ebd4?w=1200&h=680&fit=crop&auto=format',
+  viral:         'https://images.unsplash.com/photo-1611605698335-8b1569810432?w=1200&h=680&fit=crop&auto=format',
+}
+
+const THUMB_FALLBACK: Record<string, string> = {
+  politik:       'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=200&h=140&fit=crop&auto=format',
+  hukum:         'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=200&h=140&fit=crop&auto=format',
+  ekonomi:       'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=200&h=140&fit=crop&auto=format',
+  teknologi:     'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&h=140&fit=crop&auto=format',
+  sosial:        'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=200&h=140&fit=crop&auto=format',
+  olahraga:      'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=200&h=140&fit=crop&auto=format',
+  internasional: 'https://images.unsplash.com/photo-1526470608268-f674ce90ebd4?w=200&h=140&fit=crop&auto=format',
+  viral:         'https://images.unsplash.com/photo-1611605698335-8b1569810432?w=200&h=140&fit=crop&auto=format',
+}
+
+function getHeroImage(article: Article): string {
+  if (article.coverImageUrl && article.coverImageUrl.startsWith('http')) {
+    return article.coverImageUrl
+  }
+  return CATEGORY_FALLBACK[article.category.slug] || CATEGORY_FALLBACK.sosial
+}
+
+function getThumbImage(article: Article): string {
+  if (article.coverImageUrl && article.coverImageUrl.startsWith('http')) {
+    return article.coverImageUrl
+  }
+  return THUMB_FALLBACK[article.category.slug] || THUMB_FALLBACK.sosial
+}
+
 export function HeroSection({ articles }: HeroSectionProps) {
   const [hero, ...secondaries] = articles
   if (!hero) return null
@@ -20,13 +57,19 @@ export function HeroSection({ articles }: HeroSectionProps) {
         <article className="lg:col-span-3 group">
           <Link href={`/${hero.slug}`} className="block overflow-hidden rounded-xl shadow-md">
             <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`https://placehold.co/1200x680?text=${encodeURIComponent(hero.category.name + '+Berita+Utama+Indonesia+Terkini+Hari+Ini')}`}
-                alt={hero.coverImageAlt}
+                src={getHeroImage(hero)}
+                alt={hero.coverImageAlt || hero.title}
                 className="w-full h-64 sm:h-80 lg:h-[420px] object-cover group-hover:scale-105 transition-transform duration-500"
                 loading="eager"
                 width={1200}
                 height={680}
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement
+                  const fallback = CATEGORY_FALLBACK[hero.category.slug] || CATEGORY_FALLBACK.sosial
+                  if (img.src !== fallback) img.src = fallback
+                }}
               />
               {/* Gradient overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
@@ -57,13 +100,17 @@ export function HeroSection({ articles }: HeroSectionProps) {
                 <div className="flex items-center gap-3 mt-3 text-slate-400 text-xs flex-wrap">
                   <span>{hero.authorLabel}</span>
                   <span aria-hidden="true">&bull;</span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" aria-hidden="true" />
-                    {hero.readingTime} mnt baca
-                  </span>
-                  <span aria-hidden="true">&bull;</span>
+                  {hero.readingTime > 0 && (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" aria-hidden="true" />
+                        {hero.readingTime} mnt baca
+                      </span>
+                      <span aria-hidden="true">&bull;</span>
+                    </>
+                  )}
                   <time>{formatDistanceToNow(hero.publishedAt || hero.createdAt)}</time>
-                  {hero.viewCount && (
+                  {!!hero.viewCount && (
                     <>
                       <span aria-hidden="true">&bull;</span>
                       <span className="flex items-center gap-1">
@@ -88,13 +135,19 @@ export function HeroSection({ articles }: HeroSectionProps) {
               {/* Thumbnail */}
               <Link href={`/${article.slug}`} className="shrink-0">
                 <div className="relative overflow-hidden rounded-lg">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`https://placehold.co/160x110?text=${encodeURIComponent(article.category.name + '+News')}`}
-                    alt={article.coverImageAlt}
-                    className="w-24 h-18 md:w-28 md:h-20 object-cover group-hover:scale-105 transition-transform duration-300"
+                    src={getThumbImage(article)}
+                    alt={article.coverImageAlt || article.title}
+                    className="w-24 h-[72px] md:w-28 md:h-20 object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
                     width={160}
                     height={110}
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement
+                      const fallback = THUMB_FALLBACK[article.category.slug] || THUMB_FALLBACK.sosial
+                      if (img.src !== fallback) img.src = fallback
+                    }}
                   />
                   {article.isBreaking && (
                     <span className="absolute top-1 left-1 bg-[var(--red)] text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
@@ -119,7 +172,7 @@ export function HeroSection({ articles }: HeroSectionProps) {
                 </div>
                 <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                   <time>{formatDistanceToNow(article.publishedAt || article.createdAt)}</time>
-                  {article.viewCount && (
+                  {!!article.viewCount && (
                     <>
                       <span aria-hidden="true">&bull;</span>
                       <span className="flex items-center gap-1">
