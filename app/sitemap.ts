@@ -1,97 +1,47 @@
-// ============================================
-// KabarKini — XML Sitemap
-// Auto-generated for all published articles + static pages
-// ============================================
-
+// app/sitemap.ts
 import { MetadataRoute } from 'next'
-import { ARTICLES, CATEGORIES, TAGS } from '@/lib/mock-data'
+import { getPublishedArticles, getCategories, getTags } from '@/lib/supabase/queries'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://kabarkini.id'
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const publishedArticles = ARTICLES.filter((a) => a.status === 'published')
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [articles, categories, tags] = await Promise.all([
+    getPublishedArticles(500),
+    getCategories(),
+    getTags(),
+  ])
 
-  // Static pages
   const staticPages: MetadataRoute.Sitemap = [
-    {
-      url: SITE_URL,
-      lastModified: new Date(),
-      changeFrequency: 'hourly',
-      priority: 1.0,
-    },
-    {
-      url: `${SITE_URL}/trending`,
-      lastModified: new Date(),
-      changeFrequency: 'hourly',
-      priority: 0.9,
-    },
-    {
-      url: `${SITE_URL}/pencarian`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.5,
-    },
-    {
-      url: `${SITE_URL}/arsip`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.6,
-    },
-    {
-      url: `${SITE_URL}/tentang-kami`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    {
-      url: `${SITE_URL}/kontak`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/kebijakan-privasi`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/disclaimer`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/pedoman-editorial`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
+    { url: SITE_URL, lastModified: new Date(), changeFrequency: 'hourly',  priority: 1.0 },
+    { url: `${SITE_URL}/trending`,  lastModified: new Date(), changeFrequency: 'hourly',  priority: 0.9 },
+    { url: `${SITE_URL}/arsip`,     lastModified: new Date(), changeFrequency: 'daily',   priority: 0.6 },
+    { url: `${SITE_URL}/pencarian`, lastModified: new Date(), changeFrequency: 'weekly',  priority: 0.5 },
+    { url: `${SITE_URL}/tentang-kami`,       changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${SITE_URL}/kontak`,             changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${SITE_URL}/kebijakan-privasi`,  changeFrequency: 'monthly', priority: 0.3 },
+    { url: `${SITE_URL}/syarat-ketentuan`,   changeFrequency: 'monthly', priority: 0.3 },
   ]
 
-  // Category pages
-  const categoryPages: MetadataRoute.Sitemap = CATEGORIES.map((cat) => ({
-    url: `${SITE_URL}/kategori/${cat.slug}`,
-    lastModified: new Date(),
-    changeFrequency: 'hourly' as const,
-    priority: 0.8,
-  }))
-
-  // Tag pages
-  const tagPages: MetadataRoute.Sitemap = TAGS.map((tag) => ({
-    url: `${SITE_URL}/tag/${tag.slug}`,
-    lastModified: new Date(),
-    changeFrequency: 'daily' as const,
-    priority: 0.6,
-  }))
-
-  // Article pages
-  const articlePages: MetadataRoute.Sitemap = publishedArticles.map((article) => ({
-    url: `${SITE_URL}/${article.slug}`,
-    lastModified: new Date(article.updatedAt),
+  const articlePages: MetadataRoute.Sitemap = articles.map(a => ({
+    url:             `${SITE_URL}/${a.slug}`,
+    lastModified:    new Date(a.updatedAt || a.publishedAt || a.createdAt),
     changeFrequency: 'weekly' as const,
-    priority: article.isFeatured ? 0.9 : article.isTrending ? 0.85 : 0.7,
+    priority:        a.isBreaking || a.isTrending ? 0.9 : 0.8,
   }))
 
-  return [...staticPages, ...categoryPages, ...tagPages, ...articlePages]
+  const categoryPages: MetadataRoute.Sitemap = categories.map(c => ({
+    url:             `${SITE_URL}/kategori/${c.slug}`,
+    lastModified:    new Date(),
+    changeFrequency: 'hourly' as const,
+    priority:        0.7,
+  }))
+
+  const tagPages: MetadataRoute.Sitemap = tags.map(t => ({
+    url:             `${SITE_URL}/tag/${t.slug}`,
+    lastModified:    new Date(),
+    changeFrequency: 'daily' as const,
+    priority:        0.5,
+  }))
+
+  return [...staticPages, ...articlePages, ...categoryPages, ...tagPages]
 }
