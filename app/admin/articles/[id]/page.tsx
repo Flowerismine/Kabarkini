@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import {
@@ -53,8 +53,32 @@ export default function EditArticlePage() {
   // AI Rewrite state
   const [rewriting, setRewriting]   = useState(false)
   const [rewriteError, setRewriteError] = useState('')
+  const editorRef = useRef<HTMLDivElement>(null)
 
   const isNew = !articleId || articleId === 'new'
+
+  // Sync contentEditable → form.body
+  const handleEditorInput = useCallback(() => {
+    if (editorRef.current) {
+      set('body', editorRef.current.innerHTML)
+    }
+  }, [])
+
+  // Sync form.body → contentEditable on load (only when not focused)
+  useEffect(() => {
+    if (editorRef.current && !editorRef.current.contains(document.activeElement)) {
+      if (editorRef.current.innerHTML !== form.body) {
+        editorRef.current.innerHTML = form.body
+      }
+    }
+  }, [form.body])
+
+  const execCmd = (cmd: string, value?: string) => {
+    editorRef.current?.focus()
+    document.execCommand(cmd, false, value)
+    handleEditorInput()
+  }
+
 
   // Load article data if editing
   useEffect(() => {
@@ -162,15 +186,8 @@ export default function EditArticlePage() {
       metaTitle:       form.metaTitle.trim() || form.title.trim(),
       metaDescription: form.metaDesc.trim(),
       focusKeyword:    form.focusKw.trim(),
-      articleText:     form.body.trim(),
-      articleHtml:     form.body.trim()
-        .split(/\n\n+/)
-        .map((p: string) => p.trim())
-        .filter((p: string) => p.length > 0)
-        .map((p: string) => p.startsWith('**') && p.endsWith('**')
-          ? `<h3>${p.replace(/\*\*/g, '')}</h3>`
-          : `<p>${p}</p>`)
-        .join('\n'),
+      articleText:     editorRef.current?.innerText?.trim() ?? form.body.trim(),
+      articleHtml:     form.body.trim(),
       coverImageUrl:   form.coverImageUrl.trim(),
       categoryId:      form.categoryId,
       tagIds:          form.selectedTagIds,
@@ -395,13 +412,40 @@ export default function EditArticlePage() {
                   </div>
                 )}
 
-                <textarea
-                  value={form.body}
-                  onChange={e => set('body', e.target.value)}
-                  rows={20}
-                  className="w-full text-sm border border-border rounded-lg p-4 outline-none resize-none focus:border-[var(--navy)] transition-colors font-sans leading-relaxed"
-                  placeholder="Tulis isi artikel di sini..."
+                {/* Toolbar */}
+                <div className="flex flex-wrap gap-1 mb-2 p-2 bg-slate-50 border border-border rounded-lg">
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('bold') }}
+                    className="px-2.5 py-1 text-xs font-bold border border-border rounded hover:bg-white transition-colors">B</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('italic') }}
+                    className="px-2.5 py-1 text-xs italic border border-border rounded hover:bg-white transition-colors">I</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('underline') }}
+                    className="px-2.5 py-1 text-xs underline border border-border rounded hover:bg-white transition-colors">U</button>
+                  <div className="w-px bg-border mx-1" />
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('formatBlock', 'h2') }}
+                    className="px-2.5 py-1 text-xs font-semibold border border-border rounded hover:bg-white transition-colors">H2</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('formatBlock', 'h3') }}
+                    className="px-2.5 py-1 text-xs font-semibold border border-border rounded hover:bg-white transition-colors">H3</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('formatBlock', 'p') }}
+                    className="px-2.5 py-1 text-xs border border-border rounded hover:bg-white transition-colors">¶ P</button>
+                  <div className="w-px bg-border mx-1" />
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }}
+                    className="px-2.5 py-1 text-xs border border-border rounded hover:bg-white transition-colors">• List</button>
+                  <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('insertOrderedList') }}
+                    className="px-2.5 py-1 text-xs border border-border rounded hover:bg-white transition-colors">1. List</button>
+                </div>
+
+                {/* ContentEditable Editor */}
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleEditorInput}
+                  className="rich-editor"
+                  data-placeholder="Tulis isi artikel di sini..."
                 />
+                {!form.body && (
+                  <style>{`.rich-editor:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; }`}</style>
+                )}
               </div>
             </div>
           )}
