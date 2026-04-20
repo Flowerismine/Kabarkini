@@ -9,14 +9,13 @@ import {
   getPublishedArticles,
   getFeaturedArticles,
   getArticlesByCategory,
-  getCategories,
 } from '@/lib/supabase/queries'
 import Link from 'next/link'
 import { NewsletterForm } from '@/components/news/newsletter-form'
 import { ArrowRight, Star } from 'lucide-react'
+import type { Article } from '@/types'
 
-// Selalu fetch fresh — tidak cache
-export const dynamic   = 'force-dynamic'
+export const dynamic    = 'force-dynamic'
 export const revalidate = 0
 
 export const metadata: Metadata = {
@@ -29,7 +28,6 @@ export const metadata: Metadata = {
   },
 }
 
-// Hardcode kategori nav — tidak perlu fetch
 const NAV_CATEGORIES = [
   { name: 'Politik',       slug: 'politik'       },
   { name: 'Hukum',         slug: 'hukum'         },
@@ -43,8 +41,12 @@ const NAV_CATEGORIES = [
 
 const POPULAR_TAGS = ['DPR','KPK','Korupsi','Pemilu','BI Rate','AI','Hukum','APBN','Gempa','Timnas']
 
+// Safe fetch — never throws, returns [] on error
+async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try { return await fn() } catch { return fallback }
+}
+
 export default async function HomePage() {
-  // Fetch semua data dari Supabase secara parallel
   const [
     latestArticles,
     featuredArticles,
@@ -53,15 +55,15 @@ export default async function HomePage() {
     ekonomiArticles,
     teknologiArticles,
   ] = await Promise.all([
-    getPublishedArticles(12),
-    getFeaturedArticles(),
-    getArticlesByCategory('politik'),
-    getArticlesByCategory('hukum'),
-    getArticlesByCategory('ekonomi'),
-    getArticlesByCategory('teknologi'),
+    safe(() => getPublishedArticles(12), [] as Article[]),
+    safe(() => getFeaturedArticles(),    [] as Article[]),
+    safe(() => getArticlesByCategory('politik'),    [] as Article[]),
+    safe(() => getArticlesByCategory('hukum'),      [] as Article[]),
+    safe(() => getArticlesByCategory('ekonomi'),    [] as Article[]),
+    safe(() => getArticlesByCategory('teknologi'),  [] as Article[]),
   ])
 
-  const editorPicks = featuredArticles.slice(0, 3)
+  const editorPicks     = featuredArticles.slice(0, 3)
   const popularArticles = [...latestArticles]
     .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
     .slice(0, 5)
@@ -71,40 +73,35 @@ export default async function HomePage() {
       <SiteHeader />
       <BreakingTicker />
 
-      {/* Leaderboard Ad */}
       <div className="bg-white border-b border-border py-3 flex justify-center">
         <AdSlot position="header" />
       </div>
 
       <main className="max-w-7xl mx-auto px-4 py-8" id="main-content">
-
-        {/* Hero — 4 artikel terbaru */}
         {latestArticles.length > 0 ? (
           <HeroSection articles={latestArticles.slice(0, 4)} />
         ) : (
           <div className="bg-slate-50 rounded-2xl p-12 text-center mb-8">
             <p className="text-slate-400 text-lg font-serif">Belum ada artikel yang diterbitkan.</p>
             <p className="text-slate-400 text-sm mt-2">Jalankan workflow untuk mulai generate berita.</p>
+            <Link href="/admin/workflow" className="mt-4 inline-block text-[var(--navy)] font-semibold hover:underline text-sm">
+              Ke Halaman Workflow →
+            </Link>
           </div>
         )}
 
-        {/* Category nav strip */}
+        {/* Category nav */}
         <nav aria-label="Kategori berita" className="flex gap-2 overflow-x-auto pb-2 mb-8 scrollbar-hide">
-          <Link href="/" className="shrink-0 bg-[var(--navy)] text-white text-xs font-bold px-4 py-2 rounded-full">
-            Semua
-          </Link>
+          <Link href="/" className="shrink-0 bg-[var(--navy)] text-white text-xs font-bold px-4 py-2 rounded-full">Semua</Link>
           {NAV_CATEGORIES.map(cat => (
-            <Link
-              key={cat.slug}
-              href={`/kategori/${cat.slug}`}
-              className="shrink-0 text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-[var(--navy)] hover:text-[var(--navy)] transition-colors whitespace-nowrap"
-            >
+            <Link key={cat.slug} href={`/kategori/${cat.slug}`}
+              className="shrink-0 text-xs font-semibold px-4 py-2 rounded-full border border-border hover:border-[var(--navy)] hover:text-[var(--navy)] transition-colors whitespace-nowrap">
               {cat.name}
             </Link>
           ))}
         </nav>
 
-        {/* Latest news grid */}
+        {/* Latest */}
         {latestArticles.length > 0 && (
           <section aria-labelledby="terbaru-heading" className="mb-10">
             <div className="flex items-center justify-between mb-5">
@@ -124,15 +121,12 @@ export default async function HomePage() {
           </section>
         )}
 
-        <div className="flex justify-center my-8">
-          <AdSlot position="in_content_1" />
-        </div>
+        <div className="flex justify-center my-8"><AdSlot position="in_content_1" /></div>
 
-        {/* Two column: categories + sidebar */}
+        {/* Two column */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
           <div className="lg:col-span-2 space-y-10">
 
-            {/* Politik */}
             {politikArticles.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-4">
@@ -152,11 +146,8 @@ export default async function HomePage() {
               </section>
             )}
 
-            <div className="flex justify-center">
-              <AdSlot position="in_content_2" />
-            </div>
+            <div className="flex justify-center"><AdSlot position="in_content_2" /></div>
 
-            {/* Hukum */}
             {hukumArticles.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-4">
@@ -176,7 +167,6 @@ export default async function HomePage() {
               </section>
             )}
 
-            {/* Ekonomi */}
             {ekonomiArticles.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-4">
@@ -196,7 +186,6 @@ export default async function HomePage() {
               </section>
             )}
 
-            {/* Teknologi */}
             {teknologiArticles.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-4">
@@ -222,7 +211,6 @@ export default async function HomePage() {
             <div className="sticky top-24">
               <AdSlot position="sidebar" className="mb-6" />
 
-              {/* Editor picks */}
               {editorPicks.length > 0 && (
                 <div className="bg-white rounded-xl border border-border p-5 mb-5">
                   <div className="flex items-center gap-2 mb-4">
@@ -237,7 +225,6 @@ export default async function HomePage() {
                 </div>
               )}
 
-              {/* Popular */}
               {popularArticles.length > 0 && (
                 <div className="bg-white rounded-xl border border-border p-5 mt-5">
                   <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
@@ -266,7 +253,6 @@ export default async function HomePage() {
                 </div>
               )}
 
-              {/* Tags */}
               <div className="bg-white rounded-xl border border-border p-5 mt-5">
                 <h3 className="font-serif font-bold text-base text-foreground mb-4 border-b border-border pb-3">
                   Topik Populer
@@ -291,8 +277,7 @@ export default async function HomePage() {
               Jangan Ketinggalan Berita Penting
             </h2>
             <p className="text-slate-300 mt-3 text-sm leading-relaxed">
-              Langganan newsletter KabarKini dan dapatkan ringkasan berita terpenting langsung di
-              inbox Anda setiap pagi sebelum memulai hari.
+              Langganan newsletter KabarKini dan dapatkan ringkasan berita terpenting langsung di inbox Anda setiap pagi.
             </p>
             <NewsletterForm />
             <p className="text-slate-500 text-xs mt-3">Tanpa spam. Bisa berhenti berlangganan kapan saja.</p>
