@@ -11,7 +11,7 @@ import {
   getArticlesByCategory,
   getPublishedArticles,
   getCategories,
-} from '@/lib/supabase/queries'
+} from '@/lib/supabase/public-queries'
 
 export const dynamic   = 'force-dynamic'
 export const revalidate = 0
