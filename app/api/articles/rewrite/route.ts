@@ -1,9 +1,29 @@
 // app/api/articles/rewrite/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-const LLM_ENDPOINT = process.env.AI_API_ENDPOINT ?? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
-const LLM_API_KEY  = process.env.AI_API_KEY ?? ''
-const DEFAULT_MODEL = process.env.AI_DEFAULT_MODEL ?? 'gemini-2.0-flash'
+const LLM_ENDPOINT  = process.env.AI_API_ENDPOINT  ?? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+const LLM_API_KEY   = process.env.AI_API_KEY        ?? ''
+const DEFAULT_MODEL = process.env.AI_DEFAULT_MODEL  ?? 'gemini-2.0-flash'
+
+function parseGeminiError(status: number, body: string): string {
+  try {
+    const json = JSON.parse(body)
+    const msg: string = json?.error?.message ?? json?.[0]?.error?.message ?? ''
+
+    if (status === 429 || msg.toLowerCase().includes('quota')) {
+      return 'Kuota Gemini AI sudah habis hari ini. Coba lagi besok atau aktifkan billing di Google AI Studio.'
+    }
+    if (status === 401 || status === 403) {
+      return 'API Key Gemini tidak valid atau tidak punya akses. Cek kembali AI_API_KEY di Vercel.'
+    }
+    if (status === 400) {
+      return 'Permintaan ke AI tidak valid. Pastikan judul atau isi artikel sudah terisi.'
+    }
+    if (msg) return `AI Error: ${msg.slice(0, 120)}`
+  } catch { /* ignore */ }
+
+  return `Gagal menghubungi AI (HTTP ${status}). Coba beberapa saat lagi.`
+}
 
 export async function POST(req: NextRequest) {
   const { title, body, excerpt } = await req.json().catch(() => ({}))
@@ -22,7 +42,6 @@ ATURAN PENULISAN:
 - Bahasa Indonesia baku dan jurnalistik
 - Struktur: (1) Lead paragraph kuat berisi 5W1H, (2) Tubuh berita dengan fakta & detail, (3) Kutipan narasumber jika ada, (4) Penutup berisi konteks atau dampak
 - Gunakan sub-judul bold (**Sub Judul**) jika konten cukup panjang
-- Jangan tambahkan kata "Artikel:" atau penjelasan di luar artikel
 - Output HANYA teks artikel, tanpa judul, tanpa penjelasan tambahan`
 
   const user = `Judul berita: ${title}
@@ -51,21 +70,27 @@ Tulis artikel berita lengkap:`
       signal: AbortSignal.timeout(30000),
     })
 
+    const rawBody = await res.text()
+
     if (!res.ok) {
-      const err = await res.text()
-      return NextResponse.json({ error: `AI error ${res.status}: ${err}` }, { status: 500 })
+      const friendlyError = parseGeminiError(res.status, rawBody)
+      return NextResponse.json({ error: friendlyError }, { status: res.status })
     }
 
-    const data = await res.json()
+    const data = JSON.parse(rawBody)
     const newBody = data.choices?.[0]?.message?.content?.trim() ?? ''
 
     if (!newBody) {
-      return NextResponse.json({ error: 'Respons AI kosong' }, { status: 500 })
+      return NextResponse.json({ error: 'Respons AI kosong. Coba lagi.' }, { status: 500 })
     }
 
     return NextResponse.json({ body: newBody })
+
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Gagal menghubungi AI'
-    return NextResponse.json({ error: message }, { status: 500 })
+    const friendly = message.includes('timeout') || message.includes('abort')
+      ? 'Permintaan ke AI timeout (>30 detik). Coba lagi.'
+      : 'Tidak dapat terhubung ke AI. Periksa koneksi atau coba lagi nanti.'
+    return NextResponse.json({ error: friendly }, { status: 500 })
   }
 }
