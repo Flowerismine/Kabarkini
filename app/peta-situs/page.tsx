@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { BreakingTicker } from '@/components/layout/breaking-ticker'
-import { getPublishedArticles, getCategories, getTags } from '@/lib/supabase/queries'
+import { getPublishedArticles, getCategories, getTags } from '@/lib/supabase/public-queries'
 import { ChevronRight } from 'lucide-react'
 
 export const dynamic   = 'force-dynamic'
