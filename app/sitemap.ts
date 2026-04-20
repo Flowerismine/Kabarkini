@@ -1,6 +1,6 @@
 // app/sitemap.ts
 import { MetadataRoute } from 'next'
-import { getPublishedArticles, getCategories, getTags } from '@/lib/supabase/queries'
+import { getPublishedArticles, getCategories, getTags } from '@/lib/supabase/public-queries'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://kabarkini.id'
 

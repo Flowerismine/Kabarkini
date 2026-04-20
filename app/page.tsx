@@ -9,7 +9,7 @@ import {
   getPublishedArticles,
   getFeaturedArticles,
   getArticlesByCategory,
-} from '@/lib/supabase/queries'
+} from '@/lib/supabase/public-queries'
 import Link from 'next/link'
 import { NewsletterForm } from '@/components/news/newsletter-form'
 import { ArrowRight, Star } from 'lucide-react'
