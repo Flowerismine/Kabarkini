@@ -3,178 +3,118 @@ import Link from 'next/link'
 import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { BreakingTicker } from '@/components/layout/breaking-ticker'
-import { CATEGORIES, TAGS, getPublishedArticles } from '@/lib/mock-data'
+import { getPublishedArticles, getCategories, getTags } from '@/lib/supabase/queries'
 import { ChevronRight } from 'lucide-react'
 
+export const dynamic   = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata: Metadata = {
-  title: 'Peta Situs',
+  title:       'Peta Situs',
   description: 'Daftar lengkap semua halaman dan kategori di KabarKini.',
-  robots: { index: true, follow: true },
+  robots:      { index: true, follow: true },
 }
 
 const STATIC_PAGES = [
-  { label: 'Beranda', href: '/' },
-  { label: 'Trending', href: '/trending' },
-  { label: 'Arsip Berita', href: '/arsip' },
-  { label: 'Pencarian', href: '/pencarian' },
-  { label: 'Sumber Berita', href: '/sumber' },
+  { label: 'Beranda',        href: '/'                    },
+  { label: 'Trending',       href: '/trending'            },
+  { label: 'Arsip Berita',   href: '/arsip'               },
+  { label: 'Pencarian',      href: '/pencarian'           },
+  { label: 'Tentang Kami',   href: '/tentang-kami'        },
+  { label: 'Kontak',         href: '/kontak'              },
+  { label: 'Kebijakan Privasi', href: '/kebijakan-privasi'},
+  { label: 'Syarat & Ketentuan', href: '/syarat-ketentuan'},
+  { label: 'Disclaimer',     href: '/disclaimer'          },
+  { label: 'Pedoman Editorial', href: '/pedoman-editorial'},
+  { label: 'RSS Feed',       href: '/rss'                 },
 ]
 
-const INFO_PAGES = [
-  { label: 'Tentang Kami', href: '/tentang-kami' },
-  { label: 'Hubungi Kami', href: '/kontak' },
-  { label: 'Pedoman Editorial', href: '/pedoman-editorial' },
-  { label: 'Kebijakan Privasi', href: '/kebijakan-privasi' },
-  { label: 'Syarat & Ketentuan', href: '/syarat-ketentuan' },
-  { label: 'Disclaimer', href: '/disclaimer' },
-]
-
-export default function PetaSitusPage() {
-  const articles = getPublishedArticles()
+export default async function PetaSitusPage() {
+  const [articles, categories, tags] = await Promise.all([
+    getPublishedArticles(100),
+    getCategories(),
+    getTags(),
+  ])
 
   return (
     <>
       <SiteHeader />
       <BreakingTicker />
-      <main className="max-w-5xl mx-auto px-4 py-12" id="main-content">
-        {/* Breadcrumb */}
-        <nav className="flex items-center gap-1 text-xs text-muted-foreground mb-6" aria-label="Breadcrumb">
-          <Link href="/" className="hover:text-[var(--navy)] transition-colors">Beranda</Link>
-          <ChevronRight className="w-3 h-3" />
-          <span className="text-foreground font-medium">Peta Situs</span>
-        </nav>
-
+      <main className="max-w-5xl mx-auto px-4 py-10" id="main-content">
         <h1 className="font-serif text-3xl font-bold text-foreground mb-2">Peta Situs</h1>
-        <p className="text-muted-foreground text-sm mb-10">
-          Daftar lengkap semua halaman, kategori, dan artikel yang tersedia di KabarKini.
-        </p>
+        <p className="text-muted-foreground text-sm mb-8">Daftar lengkap semua halaman, kategori, dan artikel di KabarKini.</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {/* Halaman Utama */}
-          <section>
-            <h2 className="font-serif font-bold text-base text-foreground border-b border-border pb-3 mb-4">
-              Halaman Utama
-            </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Halaman Statis */}
+          <div>
+            <h2 className="font-serif font-bold text-lg text-foreground mb-3 border-b border-border pb-2">Halaman Utama</h2>
             <ul className="space-y-2">
-              {STATIC_PAGES.map((p) => (
+              {STATIC_PAGES.map(p => (
                 <li key={p.href}>
-                  <Link
-                    href={p.href}
-                    className="text-sm text-[var(--navy)] hover:text-[var(--red)] transition-colors flex items-center gap-1"
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0" />
-                    {p.label}
+                  <Link href={p.href} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-[var(--navy)] transition-colors">
+                    <ChevronRight className="w-3.5 h-3.5" /> {p.label}
                   </Link>
                 </li>
               ))}
             </ul>
-          </section>
+          </div>
 
           {/* Kategori */}
-          <section>
-            <h2 className="font-serif font-bold text-base text-foreground border-b border-border pb-3 mb-4">
-              Kategori Berita
-            </h2>
+          <div>
+            <h2 className="font-serif font-bold text-lg text-foreground mb-3 border-b border-border pb-2">Kategori</h2>
             <ul className="space-y-2">
-              {CATEGORIES.map((cat) => (
+              {categories.map(cat => (
                 <li key={cat.id}>
-                  <Link
-                    href={`/kategori/${cat.slug}`}
-                    className="text-sm text-[var(--navy)] hover:text-[var(--red)] transition-colors flex items-center gap-1"
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0" />
+                  <Link href={`/kategori/${cat.slug}`}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-[var(--navy)] transition-colors">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
                     {cat.name}
                   </Link>
                 </li>
               ))}
             </ul>
-          </section>
 
-          {/* Informasi */}
-          <section>
-            <h2 className="font-serif font-bold text-base text-foreground border-b border-border pb-3 mb-4">
-              Informasi & Legal
+            {tags.length > 0 && (
+              <>
+                <h2 className="font-serif font-bold text-lg text-foreground mt-6 mb-3 border-b border-border pb-2">Tag</h2>
+                <ul className="space-y-2">
+                  {tags.slice(0, 20).map(tag => (
+                    <li key={tag.id}>
+                      <Link href={`/tag/${tag.slug}`}
+                        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-[var(--navy)] transition-colors">
+                        <ChevronRight className="w-3.5 h-3.5" /> #{tag.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+
+          {/* Artikel Terbaru */}
+          <div>
+            <h2 className="font-serif font-bold text-lg text-foreground mb-3 border-b border-border pb-2">
+              Artikel Terbaru ({articles.length})
             </h2>
             <ul className="space-y-2">
-              {INFO_PAGES.map((p) => (
-                <li key={p.href}>
-                  <Link
-                    href={p.href}
-                    className="text-sm text-[var(--navy)] hover:text-[var(--red)] transition-colors flex items-center gap-1"
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0" />
-                    {p.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Tags */}
-          <section>
-            <h2 className="font-serif font-bold text-base text-foreground border-b border-border pb-3 mb-4">
-              Tag Populer
-            </h2>
-            <ul className="space-y-2">
-              {TAGS.slice(0, 12).map((tag) => (
-                <li key={tag.id}>
-                  <Link
-                    href={`/tag/${tag.slug}`}
-                    className="text-sm text-[var(--navy)] hover:text-[var(--red)] transition-colors flex items-center gap-1"
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0" />
-                    #{tag.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Feed & API */}
-          <section>
-            <h2 className="font-serif font-bold text-base text-foreground border-b border-border pb-3 mb-4">
-              Feed & Data
-            </h2>
-            <ul className="space-y-2">
-              {[
-                { label: 'RSS Feed', href: '/rss' },
-                { label: 'Google News Sitemap', href: '/news-sitemap.xml' },
-                { label: 'XML Sitemap', href: '/sitemap.xml' },
-                { label: 'Robots.txt', href: '/robots.txt' },
-              ].map((p) => (
-                <li key={p.href}>
-                  <Link
-                    href={p.href}
-                    className="text-sm text-[var(--navy)] hover:text-[var(--red)] transition-colors flex items-center gap-1"
-                    target={p.href.includes('.xml') || p.href.includes('.txt') ? '_blank' : undefined}
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0" />
-                    {p.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* Artikel terbaru */}
-          <section className="md:col-span-2 lg:col-span-3">
-            <h2 className="font-serif font-bold text-base text-foreground border-b border-border pb-3 mb-4">
-              Artikel Terbaru ({articles.length} artikel)
-            </h2>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
-              {articles.map((a) => (
+              {articles.slice(0, 30).map(a => (
                 <li key={a.id}>
-                  <Link
-                    href={`/${a.slug}`}
-                    className="text-sm text-[var(--navy)] hover:text-[var(--red)] transition-colors flex items-start gap-1 py-1"
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0 mt-1" />
-                    <span className="line-clamp-2 leading-snug">{a.title}</span>
+                  <Link href={`/${a.slug}`}
+                    className="flex items-start gap-2 text-sm text-muted-foreground hover:text-[var(--navy)] transition-colors">
+                    <ChevronRight className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2">{a.title}</span>
                   </Link>
                 </li>
               ))}
+              {articles.length > 30 && (
+                <li>
+                  <Link href="/arsip" className="text-sm text-[var(--navy)] hover:underline font-medium">
+                    Lihat {articles.length - 30} artikel lainnya →
+                  </Link>
+                </li>
+              )}
             </ul>
-          </section>
+          </div>
         </div>
       </main>
       <SiteFooter />
