@@ -163,6 +163,14 @@ export default function EditArticlePage() {
       metaDescription: form.metaDesc.trim(),
       focusKeyword:    form.focusKw.trim(),
       articleText:     form.body.trim(),
+      articleHtml:     form.body.trim()
+        .split(/\n\n+/)
+        .map((p: string) => p.trim())
+        .filter((p: string) => p.length > 0)
+        .map((p: string) => p.startsWith('**') && p.endsWith('**')
+          ? `<h3>${p.replace(/\*\*/g, '')}</h3>`
+          : `<p>${p}</p>`)
+        .join('\n'),
       coverImageUrl:   form.coverImageUrl.trim(),
       categoryId:      form.categoryId,
       tagIds:          form.selectedTagIds,
