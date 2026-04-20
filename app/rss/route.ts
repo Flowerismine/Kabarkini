@@ -1,6 +1,6 @@
 // app/rss/route.ts
 import { NextResponse } from 'next/server'
-import { getPublishedArticles } from '@/lib/supabase/queries'
+import { getPublishedArticles } from '@/lib/supabase/public-queries'
 
 const SITE_URL  = process.env.NEXT_PUBLIC_SITE_URL || 'https://kabarkini.id'
 const SITE_NAME = 'KabarKini'
