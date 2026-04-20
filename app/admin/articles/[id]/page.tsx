@@ -2,21 +2,21 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import {
-  ArrowLeft, Save, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, X,
+  ArrowLeft, Save, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, X, Sparkles, RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ArticleStatus } from '@/types'
 
-interface NewArticleForm {
+interface ArticleForm {
   title:          string
   excerpt:        string
   metaTitle:      string
   metaDesc:       string
   focusKw:        string
   body:           string
-  coverImageUrl:  string  // ← baru
+  coverImageUrl:  string
   categoryId:     string
   status:         ArticleStatus
   scheduledAt:    string
@@ -26,48 +26,80 @@ interface NewArticleForm {
   selectedTagIds: string[]
 }
 
-const INITIAL_FORM: NewArticleForm = {
-  title:          '',
-  excerpt:        '',
-  metaTitle:      '',
-  metaDesc:       '',
-  focusKw:        '',
-  body:           '',
-  coverImageUrl:  '',
-  categoryId:     '',
-  status:         'draft',
-  scheduledAt:    '',
-  isBreaking:     false,
-  isFeatured:     false,
-  isTrending:     false,
+const EMPTY_FORM: ArticleForm = {
+  title: '', excerpt: '', metaTitle: '', metaDesc: '', focusKw: '',
+  body: '', coverImageUrl: '', categoryId: '', status: 'draft',
+  scheduledAt: '', isBreaking: false, isFeatured: false, isTrending: false,
   selectedTagIds: [],
 }
 
 interface Category { id: string; name: string; color: string }
 interface Tag      { id: string; name: string; slug: string  }
 
-export default function NewArticlePage() {
-  const router = useRouter()
-  const [form, setForm]         = useState<NewArticleForm>(INITIAL_FORM)
-  const [activeTab, setActiveTab] = useState<'content' | 'seo'>('content')
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [errorMsg, setErrorMsg] = useState('')
+export default function EditArticlePage() {
+  const router   = useRouter()
+  const params   = useParams()
+  const articleId = params?.id as string
+
+  const [form, setForm]             = useState<ArticleForm>(EMPTY_FORM)
+  const [activeTab, setActiveTab]   = useState<'content' | 'seo'>('content')
+  const [saveState, setSaveState]   = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [errorMsg, setErrorMsg]     = useState('')
   const [categories, setCategories] = useState<Category[]>([])
-  const [tags, setTags]         = useState<Tag[]>([])
+  const [tags, setTags]             = useState<Tag[]>([])
   const [imagePreview, setImagePreview] = useState(false)
+  const [loading, setLoading]       = useState(true)
 
-  // Load categories + tags from Supabase on mount
+  // AI Rewrite state
+  const [rewriting, setRewriting]   = useState(false)
+  const [rewriteError, setRewriteError] = useState('')
+
+  const isNew = !articleId || articleId === 'new'
+
+  // Load article data if editing
   useEffect(() => {
-    fetch('/api/categories')
-      .then(r => r.json())
-      .then(d => setCategories(d.categories ?? []))
-      .catch(() => {})
+    const fetchAll = async () => {
+      try {
+        const [catRes, tagRes] = await Promise.all([
+          fetch('/api/categories').then(r => r.json()),
+          fetch('/api/tags').then(r => r.json()).catch(() => ({ tags: [] })),
+        ])
+        setCategories(catRes.categories ?? [])
+        setTags(tagRes.tags ?? [])
 
-    // Tags — fallback ke empty jika belum ada API
-    fetch('/api/tags').then(r => r.json()).then(d => setTags(d.tags ?? [])).catch(() => {})
-  }, [])
+        if (!isNew) {
+          const artRes = await fetch(`/api/articles/${articleId}`)
+          if (!artRes.ok) throw new Error('Artikel tidak ditemukan')
+          const { article, tagIds } = await artRes.json()
 
-  const set = <K extends keyof NewArticleForm>(key: K, value: NewArticleForm[K]) =>
+          setForm({
+            title:          article.title          ?? '',
+            excerpt:        article.excerpt         ?? '',
+            metaTitle:      article.metaTitle       ?? '',
+            metaDesc:       article.metaDescription ?? '',
+            focusKw:        article.focusKeyword    ?? '',
+            body:           article.articleText     ?? '',
+            coverImageUrl:  article.coverImageUrl   ?? '',
+            categoryId:     article.category?.id    ?? '',
+            status:         article.status          ?? 'draft',
+            scheduledAt:    article.scheduledAt     ?? '',
+            isBreaking:     article.isBreaking      ?? false,
+            isFeatured:     article.isFeatured      ?? false,
+            isTrending:     article.isTrending      ?? false,
+            selectedTagIds: tagIds                  ?? [],
+          })
+        }
+      } catch (e) {
+        setErrorMsg(e instanceof Error ? e.message : 'Gagal memuat artikel')
+        setSaveState('error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAll()
+  }, [articleId, isNew])
+
+  const set = <K extends keyof ArticleForm>(key: K, value: ArticleForm[K]) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
   const toggleTag = (tagId: string) =>
@@ -77,62 +109,118 @@ export default function NewArticlePage() {
         : [...form.selectedTagIds, tagId]
     )
 
+  // ── AI Rewrite ──────────────────────────────────────────────
+  const handleAiRewrite = async () => {
+    if (!form.title && !form.body) {
+      setRewriteError('Judul atau isi artikel harus ada terlebih dahulu.')
+      return
+    }
+    setRewriting(true)
+    setRewriteError('')
+
+    try {
+      const prompt = `Kamu adalah jurnalis berita Indonesia profesional.
+
+Tugas: Tulis ulang artikel berita berikut menjadi lebih lengkap, informatif, dan enak dibaca. 
+Gunakan bahasa Indonesia yang baik dan baku. Struktur: paragraf pembuka yang kuat, isi yang detail, dan penutup.
+Panjang ideal: 300–500 kata.
+
+Judul: ${form.title}
+
+Isi saat ini:
+${form.body || form.excerpt || '(belum ada isi)'}
+
+Berikan HANYA teks artikel yang sudah ditulis ulang, tanpa judul, tanpa penjelasan tambahan.`
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      })
+
+      if (!res.ok) throw new Error(`API error ${res.status}`)
+      const data = await res.json()
+      const newBody = data.content?.find((b: { type: string }) => b.type === 'text')?.text ?? ''
+      if (!newBody) throw new Error('Respons AI kosong')
+
+      set('body', newBody.trim())
+    } catch (e) {
+      setRewriteError(e instanceof Error ? e.message : 'Gagal menghubungi AI')
+    } finally {
+      setRewriting(false)
+    }
+  }
+
+  // ── Save ────────────────────────────────────────────────────
   const validate = (): string | null => {
-    if (!form.title.trim())   return 'Judul tidak boleh kosong.'
-    if (!form.categoryId)     return 'Pilih kategori terlebih dahulu.'
+    if (!form.title.trim()) return 'Judul tidak boleh kosong.'
+    if (!form.categoryId)   return 'Pilih kategori terlebih dahulu.'
     if (form.status === 'scheduled' && !form.scheduledAt)
       return 'Waktu jadwal wajib diisi jika status Terjadwal.'
     return null
   }
 
   const handleSave = async () => {
-    const validationError = validate()
-    if (validationError) {
-      setErrorMsg(validationError)
-      setSaveState('error')
-      return
-    }
+    const err = validate()
+    if (err) { setErrorMsg(err); setSaveState('error'); return }
     setSaveState('saving')
     setErrorMsg('')
 
+    const payload = {
+      title:           form.title.trim(),
+      excerpt:         form.excerpt.trim(),
+      metaTitle:       form.metaTitle.trim() || form.title.trim(),
+      metaDescription: form.metaDesc.trim(),
+      focusKeyword:    form.focusKw.trim(),
+      articleText:     form.body.trim(),
+      coverImageUrl:   form.coverImageUrl.trim(),
+      categoryId:      form.categoryId,
+      tagIds:          form.selectedTagIds,
+      status:          form.status,
+      scheduledAt:     form.scheduledAt || null,
+      isBreaking:      form.isBreaking,
+      isFeatured:      form.isFeatured,
+      isTrending:      form.isTrending,
+    }
+
     try {
-      const res = await fetch('/api/articles', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title:           form.title.trim(),
-          excerpt:         form.excerpt.trim(),
-          metaTitle:       form.metaTitle.trim() || form.title.trim(),
-          metaDescription: form.metaDesc.trim(),
-          focusKeyword:    form.focusKw.trim(),
-          articleText:     form.body.trim(),
-          coverImageUrl:   form.coverImageUrl.trim(),
-          categoryId:      form.categoryId,
-          tagIds:          form.selectedTagIds,
-          status:          form.status,
-          scheduledAt:     form.scheduledAt || null,
-          isBreaking:      form.isBreaking,
-          isFeatured:      form.isFeatured,
-          isTrending:      form.isTrending,
-        }),
-      })
+      const res = isNew
+        ? await fetch('/api/articles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch(`/api/articles/${articleId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || `HTTP ${res.status}`)
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d?.error || `HTTP ${res.status}`)
       }
 
-      const data = await res.json()
       setSaveState('saved')
-      setTimeout(() => {
-        if (data.article?.id) {
-          router.push('/admin/articles')
-        }
-      }, 1000)
-    } catch (err: unknown) {
+      setTimeout(() => router.push('/admin/articles'), 1000)
+    } catch (e: unknown) {
       setSaveState('error')
-      setErrorMsg(err instanceof Error ? err.message : 'Terjadi kesalahan saat menyimpan.')
+      setErrorMsg(e instanceof Error ? e.message : 'Terjadi kesalahan saat menyimpan.')
     }
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+        <span className="ml-3 text-slate-500">Memuat artikel...</span>
+      </div>
+    )
   }
 
   return (
@@ -145,10 +233,13 @@ export default function NewArticlePage() {
           </Link>
           <div>
             <h1 className="text-sm font-bold text-slate-800">
-              {form.title || 'Artikel Baru'}
+              {form.title || (isNew ? 'Artikel Baru' : 'Edit Artikel')}
             </h1>
             <p className="text-xs text-slate-500">
-              {form.status === 'draft' ? 'Draft' : form.status === 'review' ? 'Menunggu Review' : form.status === 'published' ? 'Terbit' : form.status}
+              {form.status === 'draft' ? 'Draft'
+                : form.status === 'review' ? 'Menunggu Review'
+                : form.status === 'published' ? 'Terbit'
+                : form.status}
             </p>
           </div>
         </div>
@@ -209,7 +300,7 @@ export default function NewArticlePage() {
                 <p className="text-xs text-muted-foreground mt-1">{form.title.length} karakter</p>
               </div>
 
-              {/* Cover Image — BARU */}
+              {/* Cover Image */}
               <div className="bg-white rounded-xl border border-border p-5">
                 <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
                   <ImageIcon className="w-3.5 h-3.5" />
@@ -251,8 +342,9 @@ export default function NewArticlePage() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground mt-2">
-                  Masukkan URL gambar langsung. Disarankan ukuran 1200×630px.
-                  Contoh sumber gratis: <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer" className="text-[var(--navy)] hover:underline">Unsplash</a>,{' '}
+                  Masukkan URL gambar langsung. Disarankan ukuran 1200×630px.{' '}
+                  Contoh sumber gratis:{' '}
+                  <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer" className="text-[var(--navy)] hover:underline">Unsplash</a>,{' '}
                   <a href="https://pexels.com" target="_blank" rel="noopener noreferrer" className="text-[var(--navy)] hover:underline">Pexels</a>
                 </p>
               </div>
@@ -272,14 +364,43 @@ export default function NewArticlePage() {
                 </p>
               </div>
 
-              {/* Body */}
+              {/* Body + AI Rewrite */}
               <div className="bg-white rounded-xl border border-border p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Isi Artikel</label>
-                  <span className="text-xs text-muted-foreground">
-                    {form.body.trim() ? form.body.trim().split(/\s+/).length : 0} kata
-                  </span>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Isi Artikel</label>
+                    <span className="text-xs text-muted-foreground ml-3">
+                      {form.body.trim() ? form.body.trim().split(/\s+/).length : 0} kata
+                    </span>
+                  </div>
+
+                  {/* AI Rewrite Button */}
+                  <button
+                    onClick={handleAiRewrite}
+                    disabled={rewriting}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors disabled:opacity-60"
+                  >
+                    {rewriting
+                      ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Sedang menulis ulang...</>
+                      : <><Sparkles className="w-3.5 h-3.5" /> AI Rewrite</>
+                    }
+                  </button>
                 </div>
+
+                {rewriteError && (
+                  <div className="mb-3 flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    {rewriteError}
+                  </div>
+                )}
+
+                {rewriting && (
+                  <div className="mb-3 flex items-center gap-2 p-3 bg-violet-50 border border-violet-200 rounded-lg text-xs text-violet-700">
+                    <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                    AI sedang menulis ulang artikel berdasarkan judul dan konten yang ada...
+                  </div>
+                )}
+
                 <textarea
                   value={form.body}
                   onChange={e => set('body', e.target.value)}
@@ -311,7 +432,6 @@ export default function NewArticlePage() {
                     )}
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Meta Description</label>
                   <textarea
@@ -330,7 +450,6 @@ export default function NewArticlePage() {
                     )}
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Kata Kunci Utama</label>
                   <input
@@ -360,9 +479,7 @@ export default function NewArticlePage() {
         <aside className="xl:col-span-1 space-y-4">
           {/* Status */}
           <div className="bg-white rounded-xl border border-border p-5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Status Publikasi
-            </h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Status Publikasi</h3>
             <select
               value={form.status}
               onChange={e => set('status', e.target.value as ArticleStatus)}
@@ -419,9 +536,7 @@ export default function NewArticlePage() {
                       className="accent-[var(--navy)]"
                     />
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                    <span className="text-sm text-foreground group-hover:text-[var(--navy)] transition-colors">
-                      {cat.name}
-                    </span>
+                    <span className="text-sm text-foreground group-hover:text-[var(--navy)] transition-colors">{cat.name}</span>
                   </label>
                 ))}
               </div>
@@ -459,9 +574,9 @@ export default function NewArticlePage() {
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Flag Artikel</h3>
             <div className="space-y-2.5">
               {([
-                { label: 'Breaking News',     key: 'isBreaking' as const },
-                { label: 'Artikel Unggulan',  key: 'isFeatured' as const },
-                { label: 'Sedang Trending',   key: 'isTrending' as const },
+                { label: 'Breaking News',    key: 'isBreaking' as const },
+                { label: 'Artikel Unggulan', key: 'isFeatured' as const },
+                { label: 'Sedang Trending',  key: 'isTrending' as const },
               ]).map(({ label, key }) => (
                 <label key={key} className="flex items-center justify-between cursor-pointer">
                   <span className="text-sm text-foreground">{label}</span>
