@@ -16,7 +16,7 @@ import {
   getArticleBySlug,
   getRelatedArticles,
   getPublishedArticles,
-} from '@/lib/supabase/queries'
+} from '@/lib/supabase/public-queries'
 import { formatDate, formatDateTime } from '@/lib/date-utils'
 
 // ── Dynamic rendering: artikel baru langsung muncul tanpa rebuild ──
