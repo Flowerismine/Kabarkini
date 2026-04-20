@@ -130,3 +130,66 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
+
+/* ── Article body rendering ─────────────────────────────────── */
+.article-body p {
+  margin-bottom: 1.25rem;
+  line-height: 1.8;
+  font-size: 1rem;
+  color: #1e293b;
+}
+.article-body h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  color: #0f172a;
+}
+.article-body h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #1e293b;
+}
+.article-body strong, .article-body b {
+  font-weight: 700;
+  color: #0f172a;
+}
+.article-body em, .article-body i {
+  font-style: italic;
+}
+.article-body ul, .article-body ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.article-body ul { list-style-type: disc; }
+.article-body ol { list-style-type: decimal; }
+.article-body li { margin-bottom: 0.4rem; line-height: 1.7; }
+.article-body blockquote {
+  border-left: 4px solid #e2e8f0;
+  padding: 0.5rem 1rem;
+  margin: 1.25rem 0;
+  color: #475569;
+  font-style: italic;
+}
+
+/* ── Rich text editor (admin) ───────────────────────────────── */
+.rich-editor {
+  min-height: 280px;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  outline: none;
+  line-height: 1.8;
+  font-size: 0.9375rem;
+  color: #1e293b;
+  background: #fff;
+}
+.rich-editor:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+}
+.rich-editor p { margin-bottom: 0.75rem; }
+.rich-editor h2 { font-size: 1.2rem; font-weight: 700; margin: 1rem 0 0.4rem; }
+.rich-editor h3 { font-size: 1.05rem; font-weight: 700; margin: 0.8rem 0 0.3rem; }
