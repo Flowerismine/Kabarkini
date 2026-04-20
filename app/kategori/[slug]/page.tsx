@@ -6,6 +6,7 @@ import { SiteHeader } from '@/components/layout/site-header'
 import { SiteFooter } from '@/components/layout/site-footer'
 import { BreakingTicker } from '@/components/layout/breaking-ticker'
 import { ArticleCard } from '@/components/news/article-card'
+import { CategoryHeroImage } from '@/components/news/category-hero-image'
 import { AdSlot } from '@/components/ads/ad-slot'
 import {
   getArticlesByCategory,
@@ -150,19 +151,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 <article className="group">
                   <Link href={`/${hero.slug}`} className="block overflow-hidden rounded-xl shadow-sm">
                     <div className="relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <CategoryHeroImage
                         src={heroImg}
                         alt={hero.coverImageAlt || hero.title}
-                        className="w-full h-64 sm:h-80 object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="eager"
-                        width={900}
-                        height={500}
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement
-                          const fb = FALLBACK_IMAGES[slug] || FALLBACK_IMAGES.sosial
-                          if (img.src !== fb) img.src = fb
-                        }}
+                        fallbackSrc={FALLBACK_IMAGES[slug] || FALLBACK_IMAGES.sosial}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                       <div className="absolute top-4 left-4 flex gap-2">
