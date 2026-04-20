@@ -7,7 +7,7 @@ import { SiteFooter } from '@/components/layout/site-footer'
 import { BreakingTicker } from '@/components/layout/breaking-ticker'
 import { ArticleCard } from '@/components/news/article-card'
 import { AdSlot } from '@/components/ads/ad-slot'
-import { getArticlesByTag, getTagBySlug, getPublishedArticles, getTags } from '@/lib/supabase/queries'
+import { getArticlesByTag, getTagBySlug, getPublishedArticles, getTags } from '@/lib/supabase/public-queries'
 
 export const dynamic   = 'force-dynamic'
 export const revalidate = 0
