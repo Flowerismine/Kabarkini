@@ -119,35 +119,21 @@ export default function EditArticlePage() {
     setRewriteError('')
 
     try {
-      const prompt = `Kamu adalah jurnalis berita Indonesia profesional.
-
-Tugas: Tulis ulang artikel berita berikut menjadi lebih lengkap, informatif, dan enak dibaca. 
-Gunakan bahasa Indonesia yang baik dan baku. Struktur: paragraf pembuka yang kuat, isi yang detail, dan penutup.
-Panjang ideal: 300–500 kata.
-
-Judul: ${form.title}
-
-Isi saat ini:
-${form.body || form.excerpt || '(belum ada isi)'}
-
-Berikan HANYA teks artikel yang sudah ditulis ulang, tanpa judul, tanpa penjelasan tambahan.`
-
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/articles/rewrite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }],
+          title:   form.title,
+          body:    form.body,
+          excerpt: form.excerpt,
         }),
       })
 
-      if (!res.ok) throw new Error(`API error ${res.status}`)
       const data = await res.json()
-      const newBody = data.content?.find((b: { type: string }) => b.type === 'text')?.text ?? ''
-      if (!newBody) throw new Error('Respons AI kosong')
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
+      if (!data.body) throw new Error('Respons AI kosong')
 
-      set('body', newBody.trim())
+      set('body', data.body)
     } catch (e) {
       setRewriteError(e instanceof Error ? e.message : 'Gagal menghubungi AI')
     } finally {
